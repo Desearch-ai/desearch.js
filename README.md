@@ -23,7 +23,7 @@ Import the package and initialize the Datura client with your API key:
 ```javascript
     
     // Desearch AI Search
-    datura.AISearch({
+    const aiSearchResult = await datura.AISearch({
         prompt: "Bittensor",
         tools: [
             "Web Search",
@@ -37,16 +37,18 @@ Import the package and initialize the Datura client with your API key:
         model: "NOVA",
         date_filter: "PAST_24_HOURS",
         streaming: false,
-    }).then(result => console.log(result));
+    });
+    console.log(aiSearchResult);
 
     // Twitter post search
-    datura.twitterLinksSearch({
+    const twitterLinksResult = await datura.twitterLinksSearch({
         prompt: "Bittensor",
         model: "NOVA",
-    }).then(result => console.log(result));
+    });
+    console.log(twitterLinksResult);
 
     // Web links search
-    datura.webLinksSearch({
+    const webLinksResult = await datura.webLinksSearch({
         prompt: "Bittensor",
         tools: [
             "Web Search",
@@ -58,10 +60,11 @@ Import the package and initialize the Datura client with your API key:
             "ArXiv Search"
         ],
         model: "NOVA",
-    }).then(result => console.log(result));
+    });
+    console.log(webLinksResult);
 
     // Basic Twitter search
-    datura.basicTwitterSearch({
+    const basicTwitterResult = await datura.basicTwitterSearch({
         query: "Whats going on with Bittensor",
         sort: "Top",
         user: "elonmusk",
@@ -76,23 +79,27 @@ Import the package and initialize the Datura client with your API key:
         min_retweets: 1,
         min_replies: 1,
         min_likes: 1
-    }).then(result => console.log(result));
+    });
+    console.log(basicTwitterResult);
 
     // Basic Web search
-    datura.basicWebSearch({
+    const basicWebResult = await datura.basicWebSearch({
         query: "latest news on AI",
         num: 10,
         start: 0
-    }).then(result => console.log(result));
+    });
+    console.log(basicWebResult);
 
     // Fetch Tweets by URLs
-    datura.twitterByUrls({
+    const twitterByUrlsResult = await datura.twitterByUrls({
         urls: ["https://twitter.com/elonmusk/status/1613000000000000000"]
-    }).then(result => console.log(result));
+    });
+    console.log(twitterByUrlsResult);
 
     // Fetch Tweets by ID
-    datura.twitterById({
+    const twitterByIdResult = await datura.twitterById({
         id: "123456789"
-    }).then(result => console.log(result));
+    });
+    console.log(twitterByIdResult);
 
 ```

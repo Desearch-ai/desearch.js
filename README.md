@@ -13,9 +13,9 @@ https://console.datura.ai/
 Import the package and initialize the Datura client with your API key:
 
 ```javascript
-    const Datura = require('datura-js');
+    import Datura from "datura-js"
 
-    const datura = new Datura('your-api-key');
+    const datura = new Datura('your-api-key')
 ```
 
 ## Common requests

@@ -108,8 +108,9 @@ class Datura {
         }
       } else {
         // Non-Axios error
-        console.error('Unexpected Error:', error);
-        throw new Error(`Unexpected Error: ${error.message}`);
+        const typedError = error as Error; // Explicitly type the error
+        console.error(typedError.message); // Use the typed error
+        throw new Error(`Unexpected Error: ${typedError.message}`);
       }
     }
   }

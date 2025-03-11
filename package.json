@@ -1,6 +1,6 @@
 {
     "name": "datura-js",
-    "version": "1.5.13-beta.0",
+    "version": "1.5.13-beta.1",
     "description": "Datura SDK for Node.js and the browser",
     "publishConfig": {
         "access": "public"

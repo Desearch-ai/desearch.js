@@ -18,8 +18,8 @@
 - [basicTwitterSearch](default.md#basictwittersearch)
 - [basicWebSearch](default.md#basicwebsearch)
 - [handleRequest](default.md#handlerequest)
-- [searchTwitterLinks](default.md#searchtwitterlinks)
-- [searchWebLinks](default.md#searchweblinks)
+- [twitterLinksSearch](default.md#twitterlinkssearch)
+- [webLinksSearch](default.md#weblinkssearch)
 
 ## Constructors
 
@@ -39,7 +39,7 @@
 
 #### Defined in
 
-[index.ts:82](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L82)
+[index.ts:498](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L498)
 
 ## Properties
 
@@ -49,13 +49,13 @@
 
 #### Defined in
 
-[index.ts:80](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L80)
+[index.ts:496](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L496)
 
 ## Methods
 
 ### AISearch
 
-▸ **AISearch**(`payload`): `Promise`\<`any`\>
+▸ **AISearch**(`payload`): `Promise`\<`string` \| `AISearchResult` \| `Record`\<`string`, `any`\>\>
 
 #### Parameters
 
@@ -65,17 +65,17 @@
 
 #### Returns
 
-`Promise`\<`any`\>
+`Promise`\<`string` \| `AISearchResult` \| `Record`\<`string`, `any`\>\>
 
 #### Defined in
 
-[index.ts:118](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L118)
+[index.ts:534](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L534)
 
 ___
 
 ### basicTwitterSearch
 
-▸ **basicTwitterSearch**(`payload`): `Promise`\<`any`\>
+▸ **basicTwitterSearch**(`payload`): `Promise`\<`BasicTwitterSearchResult`\>
 
 #### Parameters
 
@@ -85,17 +85,17 @@ ___
 
 #### Returns
 
-`Promise`\<`any`\>
+`Promise`\<`BasicTwitterSearchResult`\>
 
 #### Defined in
 
-[index.ts:130](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L130)
+[index.ts:550](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L550)
 
 ___
 
 ### basicWebSearch
 
-▸ **basicWebSearch**(`payload`): `Promise`\<`any`\>
+▸ **basicWebSearch**(`payload`): `Promise`\<`WebSearchResult`\>
 
 #### Parameters
 
@@ -105,11 +105,11 @@ ___
 
 #### Returns
 
-`Promise`\<`any`\>
+`Promise`\<`WebSearchResult`\>
 
 #### Defined in
 
-[index.ts:134](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L134)
+[index.ts:554](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L554)
 
 ___
 
@@ -135,13 +135,13 @@ ___
 
 #### Defined in
 
-[index.ts:89](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L89)
+[index.ts:505](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L505)
 
 ___
 
-### searchTwitterLinks
+### twitterLinksSearch
 
-▸ **searchTwitterLinks**(`payload`): `Promise`\<`any`\>
+▸ **twitterLinksSearch**(`payload`): `Promise`\<`TwitterLinksSearchResult`\>
 
 #### Parameters
 
@@ -151,17 +151,17 @@ ___
 
 #### Returns
 
-`Promise`\<`any`\>
+`Promise`\<`TwitterLinksSearchResult`\>
 
 #### Defined in
 
-[index.ts:126](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L126)
+[index.ts:546](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L546)
 
 ___
 
-### searchWebLinks
+### webLinksSearch
 
-▸ **searchWebLinks**(`payload`): `Promise`\<`any`\>
+▸ **webLinksSearch**(`payload`): `Promise`\<`webLinksSearchResult`\>
 
 #### Parameters
 
@@ -171,8 +171,8 @@ ___
 
 #### Returns
 
-`Promise`\<`any`\>
+`Promise`\<`webLinksSearchResult`\>
 
 #### Defined in
 
-[index.ts:122](https://github.com/Datura-ai/datura.js/blob/67399829ef4abe36b65350b9c76079abf46a98c3/src/index.ts#L122)
+[index.ts:542](https://github.com/Datura-ai/datura.js/blob/499c236c58de82321f3f8efb75ce017b6690fbad/src/index.ts#L542)

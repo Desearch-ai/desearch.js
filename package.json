@@ -1,6 +1,6 @@
 {
     "name": "datura-js",
-    "version": "1.5.13-beta.4",
+    "version": "0.0.3",
     "description": "Datura SDK for Node.js and the browser",
     "publishConfig": {
         "access": "public"
@@ -57,15 +57,7 @@
         "url": "git+https://github.com/Datura-ai/datura.js.git"
     },
     "keywords": [
-        "exa",
-        "metaphor",
-        "search",
-        "AI",
-        "LLMs",
-        "RAG",
-        "retrieval",
-        "augmented",
-        "generation"
+        "datura"
     ],
     "author": "leva",
     "bugs": {

@@ -51,6 +51,7 @@ interface TwitterSearchPayload {
   min_retweets?: number | string;
   min_replies?: number | string;
   min_likes?: number | string;
+  count?: number;
 }
 
 /**

@@ -493,6 +493,11 @@ interface WebSearchResult {
   data: WebSearchResultItem[];
 }
 
+interface TwitterByUrlsResult {
+  user: TwitterUser;
+  tweets: TwitterTweet[];
+}
+
 class Datura {
   private client: AxiosInstance;
 
@@ -554,6 +559,15 @@ class Datura {
 
   async basicWebSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
     return this.handleRequest(this.client.get('/twitter', { params: payload }));
+  }
+
+  async twitterByUrls(payload: string[]): Promise<TwitterByUrlsResult[]> {
+    const urls = { urls: payload };
+    return this.handleRequest(this.client.post('/twitter/urls', urls));
+  }
+
+  async twitterById(id: string): Promise<TwitterByUrlsResult> {
+    return this.handleRequest(this.client.get(`/twitter/${id}`));
   }
 }
 

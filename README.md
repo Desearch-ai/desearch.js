@@ -78,7 +78,7 @@ Import the package and initialize the Datura client with your API key:
         is_image: true,
         min_retweets: 1,
         min_replies: 1,
-        min_likes: 1
+        min_likes: 1,
         count: 10
     });
     console.log(basicTwitterResult);

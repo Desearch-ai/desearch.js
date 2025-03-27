@@ -1,6 +1,6 @@
 {
     "name": "datura-js",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "description": "Datura SDK for Node.js and the browser",
     "publishConfig": {
         "access": "public"

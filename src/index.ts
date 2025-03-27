@@ -558,7 +558,7 @@ class Datura {
   }
 
   async basicWebSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
-    return this.handleRequest(this.client.get('/twitter', { params: payload }));
+    return this.handleRequest(this.client.get('/web', { params: payload }));
   }
 
   async twitterByUrls(payload: string[]): Promise<TwitterByUrlsResult[]> {

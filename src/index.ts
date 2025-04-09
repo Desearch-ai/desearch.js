@@ -508,6 +508,20 @@ class Datura {
     });
   }
 
+  /**
+   * Handles HTTP requests and processes responses.
+   *
+   * If the request is successful, this method returns the JSON response from the server.
+   * If an HTTP error occurs, this method throws an Error with a descriptive message.
+   * If a network error occurs, this method throws an Error with a descriptive message.
+   * If an unexpected error occurs, this method throws an Error with a descriptive message.
+   *
+   * @private
+   * @template T The type of the response data.
+   * @param {Promise<AxiosResponse<T>>} request The HTTP request promise.
+   * @returns {Promise<T>} A Promise that resolves to the JSON response from the server.
+   * @throws {Error} If an HTTP error, network error, or unexpected error occurs.
+   */
   private async handleRequest<T>(request: Promise<AxiosResponse<T>>): Promise<T> {
     try {
       const response = await request;
@@ -537,6 +551,17 @@ class Datura {
     }
   }
 
+  /**
+   * Performs an AI search with the given payload.
+   *
+   * This method sends a POST request to the /desearch/ai/search endpoint with the provided payload.
+   *
+   * If the payload contains a streaming property set to true, the method will return a Promise that resolves to a stream of data.
+   * If the payload does not contain a streaming property, or if the property is set to false, the method will return a Promise that resolves to an AISearchResult object.
+   *
+   * @param payload The payload for the AI search.
+   * @returns A Promise that resolves to an AISearchResult object, or a stream of data if the payload contains a streaming property set to true.
+   */
   async AISearch(payload: DesearchPayload): Promise<AISearchResult | string | Record<string, any>> {
     if (payload.streaming) {
       // Handle streaming logic here
@@ -545,29 +570,124 @@ class Datura {
     return this.handleRequest(this.client.post('/desearch/ai/search', payload));
   }
 
+  /**
+   * Performs a web links search with the given payload.
+   *
+   * This method sends a POST request to the /desearch/ai/search/links/web endpoint with the provided payload.
+   *
+   * @param payload The payload for the web links search.
+   * @returns A Promise that resolves to a webLinksSearchResult object.
+   */
   async webLinksSearch(payload: LinksSearchWebPayload): Promise<webLinksSearchResult> {
     return this.handleRequest(this.client.post('/desearch/ai/search/links/web', payload));
   }
 
+  /**
+   * Performs a Twitter links search with the given payload.
+   *
+   * This method sends a POST request to the /desearch/ai/search/links/twitter endpoint with the provided payload.
+   *
+   * @param payload The payload for the Twitter links search.
+   * @returns The response from the Twitter links search.
+   */
   async twitterLinksSearch(payload: LinksSearchTwitterPayload): Promise<TwitterLinksSearchResult> {
     return this.handleRequest(this.client.post('/desearch/ai/search/links/twitter', payload));
   }
 
+  /**
+   * Performs a basic Twitter search with the given payload.
+   *
+   * This method sends a POST request to the /twitter endpoint with the provided payload.
+   *
+   * @param payload The payload for the basic Twitter search.
+   * @returns A Promise that resolves to a BasicTwitterSearchResult object.
+   */
   async basicTwitterSearch(payload: TwitterSearchPayload): Promise<BasicTwitterSearchResult> {
     return this.handleRequest(this.client.post('/twitter', payload));
   }
 
+  /**
+   * Performs a basic web search with the given payload.
+   *
+   * This method sends a GET request to the /web endpoint with the provided payload.
+   *
+   * @param payload The payload for the basic web search.
+   * @returns A Promise that resolves to a WebSearchResult object.
+   */
   async basicWebSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
     return this.handleRequest(this.client.get('/web', { params: payload }));
   }
+
+/**
+ * Fetches tweets by their URLs.
+ *
+ * This method sends a request to the Twitter API to retrieve tweets based on the provided URLs.
+ *
+ * @param payload An array of tweet URLs to search for.
+ * @returns A Promise that resolves to an array of TwitterByUrlsResult objects, each containing the user and associated tweets.
+ */
 
   async twitterByUrls(payload: string[]): Promise<TwitterByUrlsResult[]> {
     const urls = { urls: payload };
     return this.handleRequest(this.client.post('/twitter/urls', urls));
   }
 
+  /**
+   * Performs a Twitter search by ID with the given arguments.
+   *
+   * @param id The ID of the tweet to search for.
+   * @returns A Promise that resolves to a TwitterByUrlsResult object.
+   */
   async twitterById(id: string): Promise<TwitterByUrlsResult> {
     return this.handleRequest(this.client.get(`/twitter/${id}`));
+  }
+
+  /**
+   * Performs a tweets by user search with the given arguments.
+   *
+   * @param user The user to search for.
+   * @param query The query to search for.
+   * @param count The number of tweets to return.
+   * @returns The response from the web search.
+   */
+  async tweetsByUser(user: string, query?: string, count?: number): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/user', { params: { user, query, count } }));
+  }
+
+  /**
+   * Performs a latest twits search with the given arguments.
+   *
+   * @param user The user to search for.
+   * @param count The number of tweets to return.
+   * @returns The response from the web search.
+   */
+  async latestTwits(user: string, count?: number): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/latest', { params: { user, count } }));
+  }
+  /**
+   * Performs a tweets and replies search with the given arguments.
+   *
+   * @param user The user to search for.
+   * @param query The query to search for.
+   * @param count The number of tweets to return.
+   * @returns The response from the web search.
+   */
+
+  async tweetsAndRepliesByUser(user: string, query?: string, count?: number): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/replies', { params: { user, query, count } }));
+  }
+
+
+  /**
+   * Performs a tweets and replies search with the given arguments.
+   *
+   * @param post_id The post id to search for.
+   * @param query The query to search for.
+   * @param count The number of tweets to return.
+   * @returns The response from the web search.
+   */
+  async twitterRepliesPost(post_id: string, count?: number, query?: string): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/replies/post', { params: { post_id, query, count } }));
   }
 }
 

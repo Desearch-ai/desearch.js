@@ -103,4 +103,27 @@ Import the package and initialize the Datura client with your API key:
     });
     console.log(twitterByIdResult);
 
+    //Fetch Tweets by User
+    twitterByUserResult = await datura.tweetsByUser({
+        user: "elonmusk",
+        query: "Bittensor",
+        count: 10
+    })
+    console.log(twitterByUserResult)
+
+    //Fetch Latest Tweets
+    latestTwitsResult = datura.latestTwits({
+        user: "elonmusk",
+        count: 10
+    })
+    console.log(latestTwitsResult)
+
+    //Fetch Tweets and Replies by User
+    tweetsAndRepliesByUserResult = datura.tweetsAndRepliesByUser({
+        user: "elonmusk",
+        query: "Bittensor",
+        count: 10
+    })
+    console.log(tweetsAndRepliesByUserResult)
+    
 ```

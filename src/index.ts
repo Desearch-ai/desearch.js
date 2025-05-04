@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 
-const BASE_URL = 'https://apis.datura.ai';
+const BASE_URL = 'https://api.desearch.ai';
 const AUTH_HEADER = 'Authorization';
 
 /**
@@ -498,7 +498,48 @@ interface TwitterByUrlsResult {
   tweets: TwitterTweet[];
 }
 
-class Datura {
+interface TwitterUserResponse {
+  id: string;
+  screen_name: string;
+  is_blue_verified?: boolean;
+  following?: boolean;
+  can_dm?: boolean;
+  can_media_tag?: boolean;
+  created_at?: string;
+  default_profile?: boolean;
+  default_profile_image?: boolean;
+  description?: string;
+  entities?: {
+    description?: {
+      additionalProp1?: Record<string, any>[];
+      additionalProp2?: Record<string, any>[];
+      additionalProp3?: Record<string, any>[];
+    };
+  };
+  fast_followers_count?: number;
+  favourites_count?: number;
+  followers_count?: number;
+  friends_count?: number;
+  has_custom_timelines?: boolean;
+  is_translator?: boolean;
+  listed_count?: number;
+  location?: string;
+  media_count?: number;
+  name?: string;
+  normal_followers_count?: number;
+  pinned_tweet_ids_str?: string[];
+  possibly_sensitive?: boolean;
+  profile_banner_url?: string;
+  profile_image_url_https?: string;
+  profile_interstitial_type?: string;
+  statuses_count?: number;
+  translator_type?: string;
+  verified?: boolean;
+  want_retweets?: boolean;
+  withheld_in_countries?: string[];
+}
+
+class Desearch {
   private client: AxiosInstance;
 
   constructor(apiKey: string) {
@@ -602,8 +643,8 @@ class Datura {
    * @param payload The payload for the basic Twitter search.
    * @returns A Promise that resolves to a BasicTwitterSearchResult object.
    */
-  async basicTwitterSearch(payload: TwitterSearchPayload): Promise<BasicTwitterSearchResult> {
-    return this.handleRequest(this.client.post('/twitter', payload));
+  async twitterSearch(payload: TwitterSearchPayload): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter', { params: payload }));
   }
 
   /**
@@ -614,7 +655,7 @@ class Datura {
    * @param payload The payload for the basic web search.
    * @returns A Promise that resolves to a WebSearchResult object.
    */
-  async basicWebSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
+  async webSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
     return this.handleRequest(this.client.get('/web', { params: payload }));
   }
 
@@ -629,7 +670,7 @@ class Datura {
 
   async twitterByUrls(payload: string[]): Promise<TwitterByUrlsResult[]> {
     const urls = { urls: payload };
-    return this.handleRequest(this.client.post('/twitter/urls', urls));
+    return this.handleRequest(this.client.get('/twitter/urls', { params: urls }));
   }
 
   /**
@@ -650,18 +691,18 @@ class Datura {
    * @param count The number of tweets to return.
    * @returns The response from the web search.
    */
-  async tweetsByUser(user: string, query?: string, count?: number): Promise<BasicTwitterSearchResult> {
-    return this.handleRequest(this.client.get('/twitter/user', { params: { user, query, count } }));
+  async tweetsByUser({ user, query, count } : {user: string, query?: string, count?: number}): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/post/user', { params: { user, query, count } }));
   }
 
   /**
-   * Performs a latest twits search with the given arguments.
+   * Performs a latest Tweets search with the given arguments.
    *
    * @param user The user to search for.
    * @param count The number of tweets to return.
    * @returns The response from the web search.
    */
-  async latestTwits(user: string, count?: number): Promise<BasicTwitterSearchResult> {
+  async latestTweets({ user, count }:{user: string, count?: number}): Promise<BasicTwitterSearchResult> {
     return this.handleRequest(this.client.get('/twitter/latest', { params: { user, count } }));
   }
   /**
@@ -673,7 +714,7 @@ class Datura {
    * @returns The response from the web search.
    */
 
-  async tweetsAndRepliesByUser(user: string, query?: string, count?: number): Promise<BasicTwitterSearchResult> {
+  async tweetsAndRepliesByUser({ user, query, count}:{user: string, query?: string, count?: number}): Promise<BasicTwitterSearchResult> {
     return this.handleRequest(this.client.get('/twitter/replies', { params: { user, query, count } }));
   }
 
@@ -686,9 +727,25 @@ class Datura {
    * @param count The number of tweets to return.
    * @returns The response from the web search.
    */
-  async twitterRepliesPost(post_id: string, count?: number, query?: string): Promise<BasicTwitterSearchResult> {
+  async twitterRepliesPost({ post_id, count, query}: {post_id: string, count?: number, query?: string}): Promise<BasicTwitterSearchResult> {
     return this.handleRequest(this.client.get('/twitter/replies/post', { params: { post_id, query, count } }));
+  }
+
+  /**
+   * Performs a retweets search with the given arguments.
+   *
+   * @param post_id The post id to search for.
+   * @param query The query to search for.
+   * @param count The number of retweets to return.
+   * @returns The response from the web search.
+   */
+  async retweetsForPost({post_id, count, query}: {post_id: string, count?: number, query?: string}): Promise<BasicTwitterSearchResult> {
+    return this.handleRequest(this.client.get('/twitter/retweets/post', { params: { post_id, count, query } }));
+  }
+
+  async tweeterUser(user: string): Promise<TwitterUserResponse> {
+    return this.handleRequest(this.client.get('/twitter/user', { params: { user } }));
   }
 }
 
-export default Datura;
+export default Desearch;

@@ -1,6 +1,6 @@
 {
-    "name": "datura-js",
-    "version": "0.0.9",
+    "name": "desearch-js",
+    "version": "1.0.0",
     "description": "Datura SDK for Node.js and the browser",
     "publishConfig": {
         "access": "public"
@@ -54,14 +54,14 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Datura-ai/datura.js.git"
+        "url": "git+https://github.com/Desearch-ai/desearch.js.git"
     },
     "keywords": [
-        "datura"
+        "desearch"
     ],
     "author": "leva",
     "bugs": {
-        "url": "https://github.com/Datura-ai/datura.js/issues"
+        "url": "https://github.com/Desearch-ai/desearch.js/issues"
     },
-    "homepage": "https://github.com/Datura-ai/datura.js#readme"
+    "homepage": "https://github.com/Desearch-ai/desearch.js#readme"
 }

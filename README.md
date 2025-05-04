@@ -1,21 +1,21 @@
-# Datura
+# Desearch
 
-Datura API in JavaScript
+Desearch API in JavaScript
 
-https://console.datura.ai/
+https://desearch.ai/
 
 ## Installation
 
-`npm install datura-js`
+`npm install desearch-js`
 
 ## Usage
 
-Import the package and initialize the Datura client with your API key:
+Import the package and initialize the Desearch client with your API key:
 
 ```javascript
-    import Datura from "datura-js"
+    import Desearch from "desearch-js"
 
-    const datura = new Datura('your-api-key')
+    const desearch = new Desearch('your-api-key')
 ```
 
 ## Common requests
@@ -23,7 +23,7 @@ Import the package and initialize the Datura client with your API key:
 ```javascript
     
     // Desearch AI Search
-    const aiSearchResult = await datura.AISearch({
+    const aiSearchResult = await desearch.AISearch({
         prompt: "Bittensor",
         tools: [
             "Web Search",
@@ -41,14 +41,14 @@ Import the package and initialize the Datura client with your API key:
     console.log(aiSearchResult);
 
     // Twitter post search
-    const twitterLinksResult = await datura.twitterLinksSearch({
+    const twitterLinksResult = await desearch.twitterLinksSearch({
         prompt: "Bittensor",
         model: "NOVA",
     });
     console.log(twitterLinksResult);
 
     // Web links search
-    const webLinksResult = await datura.webLinksSearch({
+    const webLinksResult = await desearch.webLinksSearch({
         prompt: "Bittensor",
         tools: [
             "Web Search",
@@ -63,8 +63,8 @@ Import the package and initialize the Datura client with your API key:
     });
     console.log(webLinksResult);
 
-    // Basic Twitter search
-    const basicTwitterResult = await datura.basicTwitterSearch({
+    // Twitter search
+    const twitterResult = await desearch.twitterSearch({
         query: "Whats going on with Bittensor",
         sort: "Top",
         user: "elonmusk",
@@ -81,30 +81,26 @@ Import the package and initialize the Datura client with your API key:
         min_likes: 1,
         count: 10
     });
-    console.log(basicTwitterResult);
+    console.log(twitterResult);
 
-    // Basic Web search
-    const basicWebResult = await datura.basicWebSearch({
+    // Web search
+    const webResult = await desearch.webSearch({
         query: "latest news on AI",
         num: 10,
         start: 0
     });
-    console.log(basicWebResult);
+    console.log(webResult);
 
     // Fetch Tweets by URLs
-    const twitterByUrlsResult = await datura.twitterByUrls({
-        urls: ["https://twitter.com/elonmusk/status/1613000000000000000"]
-    });
+    const twitterByUrlsResult = await desearch.twitterByUrls( ["https://twitter.com/elonmusk/status/1613000000000000000"]);
     console.log(twitterByUrlsResult);
 
     // Fetch Tweets by ID
-    const twitterByIdResult = await datura.twitterById({
-        id: "123456789"
-    });
+    const twitterByIdResult = await desearch.twitterById('1613000000000000000');
     console.log(twitterByIdResult);
 
     //Fetch Tweets by User
-    twitterByUserResult = await datura.tweetsByUser({
+    const twitterByUserResult = await desearch.tweetsByUser({
         user: "elonmusk",
         query: "Bittensor",
         count: 10
@@ -112,18 +108,38 @@ Import the package and initialize the Datura client with your API key:
     console.log(twitterByUserResult)
 
     //Fetch Latest Tweets
-    latestTwitsResult = datura.latestTwits({
+    const latestTweetsResult = desearch.latestTweets({
         user: "elonmusk",
         count: 10
     })
-    console.log(latestTwitsResult)
+    console.log(latestTweetsResult)
 
     //Fetch Tweets and Replies by User
-    tweetsAndRepliesByUserResult = datura.tweetsAndRepliesByUser({
+    const tweetsAndRepliesByUserResult = desearch.tweetsAndRepliesByUser({
         user: "elonmusk",
         query: "Bittensor",
         count: 10
     })
     console.log(tweetsAndRepliesByUserResult)
+
     
+    const twitterRepliesPostResult = desearch.twitterRepliesPost({
+        post_id: "1613000000000000000",
+        count: 10,
+        query: "Bittensor"
+    })
+
+    console.log(twitterRepliesPostResult)
+
+    //Fetch Retweets
+    const retweetsForPostResult = desearch.retweetsForPost({
+        post_id: "1613000000000000000",
+        count: 10,
+        query: "Bittensor"
+    })
+    console.log(retweetsForPostResult)
+
+    // Fetch Tweeter User
+    const tweeterUserResult = desearch.tweeterUser("elonmusk");
+    console.log(tweeterUserResult);
 ```

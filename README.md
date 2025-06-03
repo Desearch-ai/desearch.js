@@ -26,13 +26,13 @@ Import the package and initialize the Desearch client with your API key:
     const aiSearchResult = await desearch.AISearch({
         prompt: "Bittensor",
         tools: [
-            "Web Search",
-            "Hacker News Search",
-            "Reddit Search",
-            "Wikipedia Search",
-            "Youtube Search",
-            "Twitter Search",
-            "ArXiv Search"
+            "web",
+            "hackernews",
+            "reddit",
+            "wikipedia",
+            "youtube",
+            "twitter",
+            "arxiv"
         ],
         model: "NOVA",
         date_filter: "PAST_24_HOURS",
@@ -51,13 +51,13 @@ Import the package and initialize the Desearch client with your API key:
     const webLinksResult = await desearch.webLinksSearch({
         prompt: "Bittensor",
         tools: [
-            "Web Search",
-            "Hacker News Search",
-            "Reddit Search",
-            "Wikipedia Search",
-            "Youtube Search",
-            "Twitter Search",
-            "ArXiv Search"
+            "web",
+            "hackernews",
+            "reddit",
+            "wikipedia",
+            "youtube",
+            "twitter",
+            "arxiv"
         ],
         model: "NOVA",
     });

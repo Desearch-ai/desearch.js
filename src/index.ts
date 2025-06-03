@@ -6,14 +6,14 @@ const AUTH_HEADER = 'Authorization';
 /**
  * @typedef {Object} DesearchPayload
  * @property {string} prompt - The prompt for the search.
- * @property {Array<'Web Search' | 'Hacker News Search' | 'Reddit Search' | 'Wikipedia Search' | 'Youtube Search' | 'Twitter Search' | 'ArXiv Search'>} tools - The tools to be used in the search.
+ * @property {Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>} tools - The tools to be used in the search.
  * @property {'NOVA' | 'ORBIT' | 'HORIZON'} model - The model to be used for the search.
  * @property {'PAST_24_HOURS' | 'PAST_2_DAYS' | 'PAST_WEEK' | 'PAST_2_WEEKS' | 'PAST_MONTH' | 'PAST_2_MONTHS' | 'PAST_YEAR' | 'PAST_2_YEARS'} [date_filter] - The date filter to apply to the search.
  * @property {boolean} streaming - Whether the search should be streamed.
  */
 interface DesearchPayload {
   prompt: string;
-  tools: Array<'Web Search' | 'Hacker News Search' | 'Reddit Search' | 'Wikipedia Search' | 'Youtube Search' | 'Twitter Search' | 'ArXiv Search'>;
+  tools: Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>;
   model: 'NOVA' | 'ORBIT' | 'HORIZON';
   date_filter?: 'PAST_24_HOURS' | 'PAST_2_DAYS' | 'PAST_WEEK' | 'PAST_2_WEEKS' | 'PAST_MONTH' | 'PAST_2_MONTHS' | 'PAST_YEAR' | 'PAST_2_YEARS';
   streaming: boolean;
@@ -69,12 +69,12 @@ interface WebSearchPayload {
 /**
  * @typedef {Object} LinksSearchWebPayload
  * @property {string} prompt - The prompt for the search.
- * @property {Array<'Web Search' | 'Hacker News Search' | 'Reddit Search' | 'Wikipedia Search' | 'Youtube Search' | 'Twitter Search' | 'ArXiv Search'>} tools - The tools to be used in the search.
+ * @property {Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>} tools - The tools to be used in the search.
  * @property {'NOVA' | 'ORBIT' | 'HORIZON'} [model] - The model to be used for the search.
  */
 interface LinksSearchWebPayload {
   prompt: string;
-  tools: Array<'Web Search' | 'Hacker News Search' | 'Reddit Search' | 'Wikipedia Search' | 'Youtube Search' | 'Twitter Search' | 'ArXiv Search'>;
+  tools: Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>;
   model: 'NOVA' | 'ORBIT' | 'HORIZON';
 }
 

@@ -56,7 +56,6 @@ Import the package and initialize the Desearch client with your API key:
             "reddit",
             "wikipedia",
             "youtube",
-            "twitter",
             "arxiv"
         ],
         model: "NOVA",

@@ -37,6 +37,8 @@ Import the package and initialize the Desearch client with your API key:
         model: "NOVA",
         date_filter: "PAST_24_HOURS",
         streaming: false,
+        result_type: "LINKS_WITH_SUMMARIES",
+        system_message: ""
     });
     console.log(aiSearchResult);
 

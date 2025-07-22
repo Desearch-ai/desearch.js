@@ -44,7 +44,8 @@ Import the package and initialize the Desearch client with your API key:
 
     // Twitter post search
     const twitterLinksResult = await desearch.twitterLinksSearch({
-        prompt: "Bittensor"
+        prompt: "Bittensor",
+        count: 10
     });
     console.log(twitterLinksResult);
 
@@ -58,7 +59,8 @@ Import the package and initialize the Desearch client with your API key:
             "wikipedia",
             "youtube",
             "arxiv"
-        ]
+        ],
+        count: 10
     });
     console.log(webLinksResult);
 

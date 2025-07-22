@@ -78,6 +78,7 @@ interface WebSearchPayload {
 interface LinksSearchWebPayload {
   prompt: string;
   tools: Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>;
+  count: number;
 }
 
 /**
@@ -86,6 +87,7 @@ interface LinksSearchWebPayload {
  */
 interface LinksSearchTwitterPayload {
   prompt: string;
+  count: number;
 }
 
 

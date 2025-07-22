@@ -34,7 +34,6 @@ Import the package and initialize the Desearch client with your API key:
             "twitter",
             "arxiv"
         ],
-        model: "NOVA",
         date_filter: "PAST_24_HOURS",
         streaming: false,
         result_type: "LINKS_WITH_SUMMARIES",
@@ -44,8 +43,7 @@ Import the package and initialize the Desearch client with your API key:
 
     // Twitter post search
     const twitterLinksResult = await desearch.twitterLinksSearch({
-        prompt: "Bittensor",
-        model: "NOVA",
+        prompt: "Bittensor"
     });
     console.log(twitterLinksResult);
 
@@ -59,8 +57,7 @@ Import the package and initialize the Desearch client with your API key:
             "wikipedia",
             "youtube",
             "arxiv"
-        ],
-        model: "NOVA",
+        ]
     });
     console.log(webLinksResult);
 

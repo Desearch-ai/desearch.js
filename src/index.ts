@@ -11,6 +11,7 @@ const AUTH_HEADER = 'Authorization';
  * @property {boolean} streaming - Whether the search should be streamed.
  * @property {'ONLY_LINKS' | 'LINKS_WITH_SUMMARIES' | 'LINKS_WITH_FINAL_SUMMARY'} [result_type] - The type of search results to return.
  * @property {string} [system_message] - The system message to use for the search.
+ * @property {number} [count] - The number of search results to return.
  */
 interface DesearchPayload {
   prompt: string;
@@ -19,6 +20,7 @@ interface DesearchPayload {
   streaming: boolean;
   result_type?: 'ONLY_LINKS' | 'LINKS_WITH_SUMMARIES' | 'LINKS_WITH_FINAL_SUMMARY' | '' | undefined | null;
   system_message?: string;
+  count?: number;
 }
 
 /**

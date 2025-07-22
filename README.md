@@ -37,7 +37,8 @@ Import the package and initialize the Desearch client with your API key:
         date_filter: "PAST_24_HOURS",
         streaming: false,
         result_type: "LINKS_WITH_SUMMARIES",
-        system_message: ""
+        system_message: "",
+        count: 10
     });
     console.log(aiSearchResult);
 

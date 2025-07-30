@@ -661,6 +661,18 @@ class Desearch {
     return this.handleRequest(this.client.get('/web', { params: payload }));
   }
 
+  /**
+   * Performs a web crawl with the given url.
+   *
+   * This method sends a GET request to the /web/crawl endpoint with the provided url.
+   *
+   * @param url The url of the website to crawl.
+   * @returns A Promise that resolves to a string.
+   */
+  async webCrawl(url: string): Promise<string> {
+    return this.handleRequest(this.client.get('/web/crawl', { params: { url } }));
+  }
+
 /**
  * Fetches tweets by their URLs.
  *

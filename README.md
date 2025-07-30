@@ -92,6 +92,10 @@ Import the package and initialize the Desearch client with your API key:
     });
     console.log(webResult);
 
+    // Web crawl
+    const webContent = await desearch.webCrawl("https://docs.desearch.ai/docs/desearch-api");
+    console.log(webContent);
+
     // Fetch Tweets by URLs
     const twitterByUrlsResult = await desearch.twitterByUrls( ["https://twitter.com/elonmusk/status/1613000000000000000"]);
     console.log(twitterByUrlsResult);

@@ -1,6 +1,6 @@
-[datura-js](README.md) / Exports
+[desearch-js](README.md) / Exports
 
-# datura-js
+# desearch-js
 
 ## Table of contents
 

@@ -24,6 +24,22 @@ interface DesearchPayload {
 }
 
 /**
+ * @typedef {Object} DeepResearchPayload
+ * @property {string} prompt - The prompt for the deep research.
+ * @property {Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>} tools - The tools to be used in the deep research.
+ * @property {'PAST_24_HOURS' | 'PAST_2_DAYS' | 'PAST_WEEK' | 'PAST_2_WEEKS' | 'PAST_MONTH' | 'PAST_2_MONTHS' | 'PAST_YEAR' | 'PAST_2_YEARS'} [date_filter] - The date filter to apply to the deep research.
+ * @property {boolean} streaming - Whether the search should be streamed.
+ * @property {string} [system_message] - The system message to use for the deep research.
+ */
+interface DeepResearchPayload {
+  prompt: string;
+  tools: Array<'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv'>;
+  date_filter?: 'PAST_24_HOURS' | 'PAST_2_DAYS' | 'PAST_WEEK' | 'PAST_2_WEEKS' | 'PAST_MONTH' | 'PAST_2_MONTHS' | 'PAST_YEAR' | 'PAST_2_YEARS';
+  streaming: boolean;
+  system_message?: string;
+}
+
+/**
  * @typedef {Object} TwitterSearchPayload
  * @property {string} query - The search query string.
  * @property {"Top" | "Latest"} [sort] - Sort order of the search results.
@@ -614,6 +630,26 @@ class Desearch {
   }
 
   /**
+   * Performs an Deep research with the given payload.
+   *
+   * This method sends a POST request to the /desearch/deep/search endpoint with the provided payload.
+   *
+   * If the payload contains a streaming property set to true, the method will return a Promise that resolves to a stream of data.
+   * If the payload does not contain a streaming property, or if the property is set to false, the method will return a Promise that resolves to an string.
+   *
+   * @param payload The payload for the Deep research.
+   * @returns A Promise that resolves to an string, or a stream of data if the payload contains a streaming property set to true.
+   */
+  async deepResearch(payload: DeepResearchPayload): Promise<string> {
+    if (payload.streaming) {
+      // Handle streaming logic here
+      return this.client.post('/desearch/deep/search', payload, { responseType: 'stream' });
+    }
+    return this.handleRequest(this.client.post('/desearch/deep/search', payload));
+  }
+
+
+  /**
    * Performs a web links search with the given payload.
    *
    * This method sends a POST request to the /desearch/ai/search/links/web endpoint with the provided payload.
@@ -659,6 +695,18 @@ class Desearch {
    */
   async webSearch(payload: WebSearchPayload): Promise<WebSearchResult> {
     return this.handleRequest(this.client.get('/web', { params: payload }));
+  }
+
+  /**
+   * Performs a web crawl with the given url.
+   *
+   * This method sends a GET request to the /web/crawl endpoint with the provided url.
+   *
+   * @param url The url of the website to crawl.
+   * @returns A Promise that resolves to a string.
+   */
+  async webCrawl(url: string): Promise<string> {
+    return this.handleRequest(this.client.get('/web/crawl', { params: { url } }));
   }
 
 /**

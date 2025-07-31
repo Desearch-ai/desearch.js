@@ -1,6 +1,6 @@
 {
     "name": "desearch-js",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "description": "Datura SDK for Node.js and the browser",
     "publishConfig": {
         "access": "public"

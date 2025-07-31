@@ -4,7 +4,7 @@ desearch-js / [Exports](modules.md)
 
 Desearch API in JavaScript
 
-https://desearch.ai/
+https://console.desearch.ai/
 
 ## Installation
 

@@ -2,7 +2,7 @@
 
 Desearch API in JavaScript
 
-https://desearch.ai/
+https://console.desearch.ai/
 
 ## Installation
 

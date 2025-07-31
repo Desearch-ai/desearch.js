@@ -44,6 +44,24 @@ Import the package and initialize the Desearch client with your API key:
     });
     console.log(aiSearchResult);
 
+    // Desearch Deep Research
+    const deepResearchResult = await desearch.deepResearch({
+        prompt: "Bittensor",
+        tools: [
+            "web",
+            "hackernews",
+            "reddit",
+            "wikipedia",
+            "youtube",
+            "twitter",
+            "arxiv"
+        ],
+        date_filter: "PAST_24_HOURS",
+        streaming: false,
+        system_message: "",
+    });
+    console.log(deepResearchResult);
+
     // Twitter post search
     const twitterLinksResult = await desearch.twitterLinksSearch({
         prompt: "Bittensor",
@@ -93,6 +111,10 @@ Import the package and initialize the Desearch client with your API key:
         start: 0
     });
     console.log(webResult);
+
+    // Web crawl
+    const webContent = await desearch.webCrawl("https://docs.desearch.ai/docs/desearch-api");
+    console.log(webContent);
 
     // Fetch Tweets by URLs
     const twitterByUrlsResult = await desearch.twitterByUrls( ["https://twitter.com/elonmusk/status/1613000000000000000"]);

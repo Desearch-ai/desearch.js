@@ -42,6 +42,24 @@ Import the package and initialize the Desearch client with your API key:
     });
     console.log(aiSearchResult);
 
+    // Desearch Deep Research
+    const deepResearchResult = await desearch.deepResearch({
+        prompt: "Bittensor",
+        tools: [
+            "web",
+            "hackernews",
+            "reddit",
+            "wikipedia",
+            "youtube",
+            "twitter",
+            "arxiv"
+        ],
+        date_filter: "PAST_24_HOURS",
+        streaming: false,
+        system_message: "",
+    });
+    console.log(deepResearchResult);
+
     // Twitter post search
     const twitterLinksResult = await desearch.twitterLinksSearch({
         prompt: "Bittensor",

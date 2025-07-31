@@ -15,6 +15,7 @@
 ### Methods
 
 - [AISearch](default.md#aisearch)
+- [deepResearch](default.md#deepresearch)
 - [handleRequest](default.md#handlerequest)
 - [latestTweets](default.md#latesttweets)
 - [retweetsForPost](default.md#retweetsforpost)
@@ -48,7 +49,7 @@
 
 #### Defined in
 
-[index.ts:547](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L547)
+[index.ts:563](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L563)
 
 ## Properties
 
@@ -58,7 +59,7 @@
 
 #### Defined in
 
-[index.ts:545](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L545)
+[index.ts:561](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L561)
 
 ## Methods
 
@@ -87,7 +88,36 @@ A Promise that resolves to an AISearchResult object, or a stream of data if the 
 
 #### Defined in
 
-[index.ts:608](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L608)
+[index.ts:624](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L624)
+
+___
+
+### deepResearch
+
+▸ **deepResearch**(`payload`): `Promise`\<`string`\>
+
+Performs an Deep research with the given payload.
+
+This method sends a POST request to the /desearch/deep/search endpoint with the provided payload.
+
+If the payload contains a streaming property set to true, the method will return a Promise that resolves to a stream of data.
+If the payload does not contain a streaming property, or if the property is set to false, the method will return a Promise that resolves to an string.
+
+#### Parameters
+
+| Name | Type | Description |
+| :------ | :------ | :------ |
+| `payload` | `DeepResearchPayload` | The payload for the Deep research. |
+
+#### Returns
+
+`Promise`\<`string`\>
+
+A Promise that resolves to an string, or a stream of data if the payload contains a streaming property set to true.
+
+#### Defined in
+
+[index.ts:643](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L643)
 
 ___
 
@@ -126,7 +156,7 @@ If an HTTP error, network error, or unexpected error occurs.
 
 #### Defined in
 
-[index.ts:568](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L568)
+[index.ts:584](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L584)
 
 ___
 
@@ -152,7 +182,7 @@ The response from the web search.
 
 #### Defined in
 
-[index.ts:719](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L719)
+[index.ts:755](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L755)
 
 ___
 
@@ -179,7 +209,7 @@ The response from the web search.
 
 #### Defined in
 
-[index.ts:756](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L756)
+[index.ts:792](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L792)
 
 ___
 
@@ -199,7 +229,7 @@ ___
 
 #### Defined in
 
-[index.ts:760](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L760)
+[index.ts:796](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L796)
 
 ___
 
@@ -226,7 +256,7 @@ The response from the web search.
 
 #### Defined in
 
-[index.ts:731](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L731)
+[index.ts:767](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L767)
 
 ___
 
@@ -253,7 +283,7 @@ The response from the web search.
 
 #### Defined in
 
-[index.ts:708](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L708)
+[index.ts:744](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L744)
 
 ___
 
@@ -277,7 +307,7 @@ A Promise that resolves to a TwitterByUrlsResult object.
 
 #### Defined in
 
-[index.ts:696](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L696)
+[index.ts:732](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L732)
 
 ___
 
@@ -303,7 +333,7 @@ A Promise that resolves to an array of TwitterByUrlsResult objects, each contain
 
 #### Defined in
 
-[index.ts:685](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L685)
+[index.ts:721](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L721)
 
 ___
 
@@ -329,7 +359,7 @@ The response from the Twitter links search.
 
 #### Defined in
 
-[index.ts:636](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L636)
+[index.ts:672](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L672)
 
 ___
 
@@ -356,7 +386,7 @@ The response from the web search.
 
 #### Defined in
 
-[index.ts:744](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L744)
+[index.ts:780](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L780)
 
 ___
 
@@ -382,7 +412,7 @@ A Promise that resolves to a BasicTwitterSearchResult object.
 
 #### Defined in
 
-[index.ts:648](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L648)
+[index.ts:684](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L684)
 
 ___
 
@@ -408,7 +438,7 @@ A Promise that resolves to a string.
 
 #### Defined in
 
-[index.ts:672](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L672)
+[index.ts:708](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L708)
 
 ___
 
@@ -434,7 +464,7 @@ A Promise that resolves to a webLinksSearchResult object.
 
 #### Defined in
 
-[index.ts:624](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L624)
+[index.ts:660](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L660)
 
 ___
 
@@ -460,4 +490,4 @@ A Promise that resolves to a WebSearchResult object.
 
 #### Defined in
 
-[index.ts:660](https://github.com/Desearch-ai/desearch.js/blob/bc4d11584876dc2b62dd09f90115aef3f26dcea2/src/index.ts#L660)
+[index.ts:696](https://github.com/Desearch-ai/desearch.js/blob/e74f4707f28994480f6ac15ed81ffa2d1daef02b/src/index.ts#L696)

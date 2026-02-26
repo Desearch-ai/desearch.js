@@ -1,6 +1,6 @@
 # Desearch
 
-The official TypeScript SDK for the Desearch API — AI-driven search, web crawling, and X (Twitter) data extraction.
+The official JavaScript SDK for the Desearch API - AI-driven search, web crawling, and X (Twitter) data extraction.
 
 ## Table of Contents
 

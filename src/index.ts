@@ -20,7 +20,6 @@ import type {
   WebSearchResultsResponse,
   WebCrawlParams,
   TwitterScraperTweet,
-  ResponseData,
 } from './types';
 
 const BASE_URL = 'https://api.desearch.ai';

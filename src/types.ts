@@ -1,27 +1,11 @@
-// ============================================================
-// Enums & Literal Union Types
-// ============================================================
+// ============================================================================
+// Enums and Literal Types
+// ============================================================================
 
-/** Tools available for AI contextual search (includes twitter). */
-export type ToolEnum =
-  | 'web'
-  | 'hackernews'
-  | 'reddit'
-  | 'wikipedia'
-  | 'youtube'
-  | 'twitter'
-  | 'arxiv';
+export type ToolEnum = 'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv';
 
-/** Tools available for web-only link search (excludes twitter). */
-export type WebToolEnum =
-  | 'web'
-  | 'hackernews'
-  | 'reddit'
-  | 'wikipedia'
-  | 'youtube'
-  | 'arxiv';
+export type WebToolEnum = 'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'arxiv';
 
-/** Predefined date filter options for search results. */
 export type DateFilterEnum =
   | 'PAST_24_HOURS'
   | 'PAST_2_DAYS'
@@ -32,445 +16,450 @@ export type DateFilterEnum =
   | 'PAST_YEAR'
   | 'PAST_2_YEARS';
 
-/** Result type controlling whether to include AI-generated summaries. */
-export type ResultTypeEnum =
-  | 'ONLY_LINKS'
-  | 'LINKS_WITH_FINAL_SUMMARY';
+export type ResultTypeEnum = 'ONLY_LINKS' | 'LINKS_WITH_FINAL_SUMMARY';
 
-/** Sort order for X search results. */
-export type XSearchSort = 'Top' | 'Latest';
-
-/** Content format for web crawl results. */
-export type CrawlFormat = 'html' | 'text';
-
-// ============================================================
+// ============================================================================
 // Request Types
-// ============================================================
+// ============================================================================
 
-/** Request payload for AI contextual search. */
 export interface AiSearchRequest {
-  /** Search query prompt. */
+  /** Search query prompt */
   prompt: string;
-  /** List of tools to use for the search. */
+  /** A list of tools to be used for the search */
   tools: (ToolEnum | string)[];
-  /** Start date for the search query (YYYY-MM-DDTHH:MM:SSZ UTC). */
+  /** The start date for the search query. Format: YYYY-MM-DDTHH:MM:SSZ (UTC) */
   start_date?: string | null;
-  /** End date for the search query (YYYY-MM-DDTHH:MM:SSZ UTC). */
+  /** The end date for the search query. Format: YYYY-MM-DDTHH:MM:SSZ (UTC) */
   end_date?: string | null;
-  /** Predefined date filter for search results. */
+  /** Predefined date filters for the search results */
   date_filter?: DateFilterEnum | null;
-  /** Whether to stream results. */
+  /** Whether to stream results (always overridden to false in the SDK) */
   streaming?: boolean;
-  /** The result type for the search. */
+  /** The result type to be used for the search */
   result_type?: ResultTypeEnum | null;
-  /** System message to customize the search response. */
+  /** The system message to be used for the search */
   system_message?: string | null;
-  /** System message for scoring the response. */
+  /** System message for scoring the response */
   scoring_system_message?: string | null;
-  /** Number of results to return per source (10–200). */
+  /** The number of results to return per source. Min 10. Max 200. */
   count?: number | null;
 }
 
-/** Request payload for AI web links search. */
 export interface AiWebLinksSearchRequest {
-  /** Search query prompt. */
+  /** Search query prompt */
   prompt: string;
-  /** List of web tools to search with. */
+  /** List of tools to search with */
   tools: (WebToolEnum | string)[];
-  /** Number of results to return per source (10–200). */
+  /** The number of results to return per source. Min 10. Max 200. */
   count?: number | null;
 }
 
-/** Request payload for AI X (Twitter) links search. */
 export interface AiXLinksSearchRequest {
-  /** Search query prompt. */
+  /** Search query prompt */
   prompt: string;
-  /** Number of results to return per source (10–200). */
+  /** The number of results to return per source. Min 10. Max 200. */
   count?: number | null;
 }
 
-/** Query parameters for X search. */
 export interface XSearchParams {
-  /** Advanced search query. */
+  /** Advanced search query */
   query: string;
-  /** Sort by Top or Latest. */
-  sort?: XSearchSort | null;
-  /** User to search for. */
+  /** Sort by Top or Latest */
+  sort?: string | null;
+  /** User to search for */
   user?: string | null;
-  /** Start date in UTC (YYYY-MM-DD format). */
+  /** Start date in UTC (YYYY-MM-DD format) */
   start_date?: string | null;
-  /** End date in UTC (YYYY-MM-DD format). */
+  /** End date in UTC (YYYY-MM-DD format) */
   end_date?: string | null;
-  /** Language code (e.g., en, es, fr). */
+  /** Language code (e.g., en, es, fr) */
   lang?: string | null;
-  /** Filter for verified users. */
+  /** Filter for verified users */
   verified?: boolean | null;
-  /** Filter for blue checkmark verified users. */
+  /** Filter for blue checkmark verified users */
   blue_verified?: boolean | null;
-  /** Include only tweets with quotes. */
+  /** Include only tweets with quotes */
   is_quote?: boolean | null;
-  /** Include only tweets with videos. */
+  /** Include only tweets with videos */
   is_video?: boolean | null;
-  /** Include only tweets with images. */
+  /** Include only tweets with images */
   is_image?: boolean | null;
-  /** Minimum number of retweets. */
+  /** Minimum number of retweets */
   min_retweets?: number | string | null;
-  /** Minimum number of replies. */
+  /** Minimum number of replies */
   min_replies?: number | string | null;
-  /** Minimum number of likes. */
+  /** Minimum number of likes */
   min_likes?: number | string | null;
-  /** Number of tweets to retrieve (1–100). */
+  /** Number of tweets to retrieve (1-100) */
   count?: number | null;
 }
 
-/** Query parameters for fetching posts by URLs. */
 export interface XPostsByUrlsParams {
-  /** List of post URLs to retrieve. */
+  /** List of urls that is to be retrieved */
   urls: string[];
 }
 
-/** Query parameters for fetching a post by ID. */
 export interface XPostByIdParams {
-  /** The unique post ID. */
+  /** The unique ID of the post */
   id: string;
 }
 
-/** Query parameters for searching posts by user. */
 export interface XPostsByUserParams {
-  /** User to search for. */
+  /** User to search for */
   user: string;
-  /** Advanced search query. */
+  /** Advanced search query */
   query?: string;
-  /** Number of tweets to retrieve (1–100). */
+  /** Number of tweets to retrieve (1-100) */
   count?: number;
 }
 
-/** Query parameters for getting retweeters of a post. */
 export interface XPostRetweetersParams {
-  /** The ID of the post to get retweeters for. */
+  /** The ID of the post to get retweeters for */
   id: string;
-  /** Cursor for pagination. */
+  /** Cursor for pagination */
   cursor?: string | null;
 }
 
-/** Query parameters for getting a user's timeline posts. */
 export interface XUserPostsParams {
-  /** Username to fetch posts for. */
+  /** Username to fetch posts for */
   username: string;
-  /** Cursor for pagination. */
+  /** Cursor for pagination */
   cursor?: string | null;
 }
 
-/** Query parameters for fetching a user's tweets and replies. */
 export interface XUserRepliesParams {
-  /** The username of the user to search for. */
+  /** The username of the user to search for */
   user: string;
-  /** The number of tweets to fetch (1–100). */
+  /** The number of tweets to fetch (1-100) */
   count?: number;
-  /** Advanced search query. */
+  /** Advanced search query */
   query?: string;
 }
 
-/** Query parameters for fetching replies to a specific post. */
 export interface XPostRepliesParams {
-  /** The ID of the post to search for. */
+  /** The ID of the post to search for */
   post_id: string;
-  /** The number of tweets to fetch (1–100). */
+  /** The number of tweets to fetch (1-100) */
   count?: number;
-  /** Advanced search query. */
+  /** Advanced search query */
   query?: string;
 }
 
-/** Query parameters for SERP web search. */
 export interface WebSearchParams {
-  /** The search query string. */
+  /** The search query string */
   query: string;
-  /** Number of results to skip for pagination (0, 10, 20, ...). */
+  /** How many results to skip for pagination (0, 10, 20, etc.) */
   start?: number;
 }
 
-/** Query parameters for web crawl. */
 export interface WebCrawlParams {
-  /** URL to crawl. */
+  /** Url to crawl */
   url: string;
-  /** Format of the content to be returned ('html' or 'text'). */
-  format?: CrawlFormat;
+  /** Format of the content to be returned: 'html' or 'text' */
+  format?: 'html' | 'text';
 }
 
-// ============================================================
+// ============================================================================
 // Response Types
-// ============================================================
+// ============================================================================
 
-/** A single search result item with title, snippet, and link. */
-export interface WebSearchResultItem {
-  /** Title of the search result. */
-  title: string;
-  /** Snippet or summary of the search result. */
-  snippet: string;
-  /** URL link of the search result. */
-  link: string;
-}
-
-/** Response data for AI contextual search. */
 export interface ResponseData {
-  /** Search results from Hacker News. */
+  /** Search results from Hacker News */
   hacker_news_search?: Record<string, string | number>[] | null;
-  /** Search results from Reddit. */
+  /** Search results from Reddit */
   reddit_search?: Record<string, string | number>[] | null;
-  /** General web search results. */
+  /** General search results */
   search?: Record<string, string | number>[] | null;
-  /** Search results from YouTube. */
+  /** Search results from YouTube */
   youtube_search?: Record<string, string | number>[] | null;
-  /** Tweets related to the search query. */
+  /** Tweets related to the search query */
   tweets?: Record<string, string | number>[] | null;
-  /** Additional text related to the search query. */
+  /** Additional text related to the search query */
   text?: string | null;
-  /** Miner link scores mapping URLs to score levels. */
+  /** A map of miner link scores */
   miner_link_scores?: Record<string, string> | null;
-  /** AI-generated completion text. */
+  /** Generated completion text or response */
   completion?: string | null;
 }
 
-/** Union type for AI search response. */
+/** Response type for aiSearch — can be structured data, a generic object, or a string */
 export type AiSearchResponse = ResponseData | Record<string, unknown> | string;
 
-/** Response for AI web links search. */
+export interface WebSearchResultItem {
+  /** Title of the search result */
+  title: string;
+  /** Snippet or description of the search result */
+  snippet: string;
+  /** URL link to the search result */
+  link: string;
+}
+
 export interface WebSearchResponse {
-  /** YouTube search results. */
+  /** Youtube search results */
   youtube_search_results: WebSearchResultItem[] | null;
-  /** Hacker News search results. */
+  /** Hacker News search results */
   hacker_news_search_results: WebSearchResultItem[] | null;
-  /** Reddit search results. */
+  /** Reddit search results */
   reddit_search_results: WebSearchResultItem[] | null;
-  /** arXiv search results. */
+  /** Arxiv search results */
   arxiv_search_results: WebSearchResultItem[] | null;
-  /** Wikipedia search results. */
+  /** Wikipedia search results */
   wikipedia_search_results: WebSearchResultItem[] | null;
-  /** General web search results. */
+  /** General search results */
   search_results: WebSearchResultItem[] | null;
 }
 
-/** Response for AI X links search. */
 export interface XLinksSearchResponse {
-  /** Miner tweets matching the search prompt. */
+  /** Miner tweets */
   miner_tweets: TwitterScraperTweet[];
 }
 
-/** Response for X retweeters. */
 export interface XRetweetersResponse {
-  /** List of users who retweeted the post. */
+  /** List of users who retweeted */
   users: TwitterScraperUser[];
-  /** Cursor for pagination. */
+  /** Cursor for pagination */
   next_cursor?: string | null;
 }
 
-/** Response for X user posts (timeline). */
 export interface XUserPostsResponse {
-  /** The user object. */
+  /** User profile information */
   user: TwitterScraperUser;
-  /** List of timeline tweets. */
+  /** User's tweets */
   tweets: TwitterScraperTweet[];
-  /** Cursor for pagination. */
+  /** Cursor for pagination */
   next_cursor?: string | null;
 }
 
-/** Response for SERP web search. */
 export interface WebSearchResultsResponse {
-  /** Array of web search result items. */
+  /** Array of web search result items */
   data: WebSearchResultItem[];
 }
 
-// ============================================================
-// Twitter / X Data Models
-// ============================================================
+// ============================================================================
+// Twitter / X Data Types
+// ============================================================================
 
-/** Represents a tweet/post from X (Twitter). */
 export interface TwitterScraperTweet {
-  /** The user who posted the tweet. */
+  /** User who posted the tweet */
   user?: TwitterScraperUser | null;
-  /** Unique tweet ID. */
+  /** Tweet ID */
   id: string;
-  /** Tweet text content. */
+  /** Tweet text content */
   text: string;
-  /** Number of replies. */
+  /** Number of replies */
   reply_count: number;
-  /** Number of views. */
+  /** Number of views */
   view_count?: number | null;
-  /** Number of retweets. */
+  /** Number of retweets */
   retweet_count: number;
-  /** Number of likes. */
+  /** Number of likes */
   like_count: number;
-  /** Number of quotes. */
+  /** Number of quotes */
   quote_count: number;
-  /** Number of bookmarks. */
+  /** Number of bookmarks */
   bookmark_count: number;
-  /** URL of the tweet. */
+  /** URL of the tweet */
   url?: string | null;
-  /** Creation timestamp. */
+  /** Creation timestamp */
   created_at: string;
-  /** Media attachments. */
+  /** Media attachments */
   media?: TwitterScraperMedia[] | null;
-  /** Whether this is a quote tweet. */
+  /** Whether this is a quote tweet */
   is_quote_tweet?: boolean | null;
-  /** Whether this is a retweet. */
+  /** Whether this is a retweet */
   is_retweet?: boolean | null;
-  /** Tweet language code. */
+  /** Tweet language code */
   lang?: string | null;
-  /** Conversation thread ID. */
+  /** Conversation thread ID */
   conversation_id?: string | null;
-  /** Username being replied to. */
+  /** Username being replied to */
   in_reply_to_screen_name?: string | null;
-  /** Tweet ID being replied to. */
+  /** Tweet ID being replied to */
   in_reply_to_status_id?: string | null;
-  /** User ID being replied to. */
+  /** User ID being replied to */
   in_reply_to_user_id?: string | null;
-  /** Quoted tweet ID. */
+  /** Quoted tweet ID */
   quoted_status_id?: string | null;
-  /** Quoted tweet object. */
+  /** Quoted tweet object */
   quote?: TwitterScraperTweet | null;
-  /** Reply tweets. */
+  /** Reply tweets */
   replies?: TwitterScraperTweet[] | null;
-  /** Text display range indices. */
+  /** Text display range indices */
   display_text_range?: number[] | null;
-  /** Tweet entities (hashtags, URLs, mentions). */
+  /** Tweet entities (hashtags, URLs, mentions) */
   entities?: TwitterScraperEntities | null;
-  /** Extended entities for media. */
+  /** Extended entities for media */
   extended_entities?: TwitterScraperExtendedEntities | null;
-  /** Retweeted tweet object. Available for user posts endpoint only. */
+  /** Retweeted tweet object */
   retweet?: TwitterScraperTweet | null;
 }
 
-/** Simplified media object on a tweet. */
+export interface TwitterScraperUser {
+  /** User ID */
+  id: string;
+  /** Profile URL */
+  url?: string | null;
+  /** Display name */
+  name?: string | null;
+  /** Username / handle */
+  username: string;
+  /** Account creation date */
+  created_at?: string | null;
+  /** Profile description / bio */
+  description?: string | null;
+  /** Number of favourites */
+  favourites_count?: number | null;
+  /** Number of followers */
+  followers_count?: number | null;
+  /** Number of accounts followed */
+  followings_count?: number | null;
+  /** Number of lists the user is on */
+  listed_count?: number | null;
+  /** Number of media uploads */
+  media_count?: number | null;
+  /** Profile image URL */
+  profile_image_url?: string | null;
+  /** Profile banner URL */
+  profile_banner_url?: string | null;
+  /** Number of statuses/tweets */
+  statuses_count?: number | null;
+  /** Whether the user is verified */
+  verified?: boolean | null;
+  /** Whether the user is Blue Tick verified */
+  is_blue_verified?: boolean | null;
+  /** User profile entities */
+  entities?: TwitterScraperUserEntities | null;
+  /** Whether the user has DMs enabled */
+  can_dm?: boolean | null;
+  /** Whether the user can be tagged in media */
+  can_media_tag?: boolean | null;
+  /** User location */
+  location?: string | null;
+  /** Pinned tweet IDs */
+  pinned_tweet_ids?: string[] | null;
+  /** Professional information */
+  professional?: TwitterScraperUserProfessional | null;
+}
+
 export interface TwitterScraperMedia {
-  /** URL of the media. */
+  /** Media URL */
   media_url?: string;
-  /** Type of media (photo, video, animated_gif). */
+  /** Media type (photo, video, animated_gif) */
   type?: string;
 }
 
-/** Entities contained within a tweet. */
 export interface TwitterScraperEntities {
-  /** Hashtags in the tweet. */
+  /** Hashtags in the tweet */
   hashtags?: TwitterScraperEntitiesSymbol[] | null;
-  /** Media attachments. */
+  /** Media attachments */
   media?: TwitterScraperEntitiesMedia[] | null;
-  /** Cashtags/symbols. */
+  /** Cashtags/symbols */
   symbols?: TwitterScraperEntitiesSymbol[] | null;
-  /** Timestamp entities. */
+  /** Timestamp entities */
   timestamps?: unknown[] | null;
-  /** URLs in the tweet. */
+  /** URLs in the tweet */
   urls?: TwitterScraperEntityUrl[] | null;
-  /** Mentioned users. */
+  /** Mentioned users */
   user_mentions?: TwitterScraperEntitiesUserMention[] | null;
 }
 
-/** Extended entities for media attachments. */
 export interface TwitterScraperExtendedEntities {
-  /** Extended media information for multiple attachments. */
+  /** Extended media information for multiple attachments */
   media?: TwitterScraperEntitiesMedia[] | null;
 }
 
-/** A hashtag or cashtag symbol entity. */
 export interface TwitterScraperEntitiesSymbol {
-  /** Character indices of the symbol in tweet text. */
+  /** Index positions in the tweet text */
   indices: number[];
-  /** The symbol text. */
+  /** Symbol or hashtag text */
   text: string;
 }
 
-/** A URL entity within a tweet. */
 export interface TwitterScraperEntityUrl {
-  /** Display URL. */
+  /** Shortened display URL */
   display_url: string;
-  /** Expanded full URL. */
+  /** Full expanded URL */
   expanded_url?: string | null;
-  /** Shortened URL. */
+  /** Shortened t.co URL */
   url: string;
-  /** Character indices in tweet text. */
+  /** Index positions in the tweet text */
   indices: number[];
 }
 
-/** A user mention entity within a tweet. */
 export interface TwitterScraperEntitiesUserMention {
-  /** User ID string. */
+  /** User ID string */
   id_str: string;
-  /** Display name. */
+  /** Display name */
   name: string;
-  /** Screen name / username. */
+  /** Screen name / handle */
   screen_name: string;
-  /** Character indices in tweet text. */
+  /** Index positions in the tweet text */
   indices: number[];
 }
 
-/** Detailed media entity within a tweet. */
 export interface TwitterScraperEntitiesMedia {
-  /** Display URL for the media. */
+  /** Display URL */
   display_url?: string | null;
-  /** Expanded URL for the media. */
+  /** Expanded URL */
   expanded_url?: string | null;
-  /** Media ID string. */
+  /** Media ID string */
   id_str?: string | null;
-  /** Character indices in tweet text. */
+  /** Index positions in the tweet text */
   indices?: number[] | null;
-  /** Media key identifier. */
+  /** Media key */
   media_key?: string | null;
-  /** HTTPS URL of the media. */
+  /** HTTPS media URL */
   media_url_https?: string | null;
-  /** Media type: photo, video, or animated_gif. */
+  /** Media type: photo, video, or animated_gif */
   type?: string | null;
-  /** Shortened URL. */
+  /** Shortened URL */
   url?: string | null;
-  /** Additional media information. */
+  /** Additional media information */
   additional_media_info?: TwitterScraperEntitiesMediaAdditionalInfo | null;
-  /** External media availability status. */
+  /** External media availability status */
   ext_media_availability?: TwitterScraperEntitiesMediaExtAvailability | null;
-  /** Media features like face detection. */
+  /** Media features like face detection */
   features?: TwitterScraperEntitiesMediaFeatures | null;
-  /** Available media sizes. */
+  /** Available media sizes */
   sizes?: TwitterScraperEntitiesMediaSizes | null;
-  /** Original media information. */
+  /** Original media information */
   original_info?: TwitterScraperEntitiesMediaOriginalInfo | null;
-  /** Download permission status. */
+  /** Download permission status */
   allow_download_status?: TwitterScraperEntitiesMediaAllowDownloadStatus | null;
-  /** Video-specific information. */
+  /** Video-specific information */
   video_info?: TwitterScraperEntitiesMediaVideoInfo | null;
-  /** Media result details. */
+  /** Media result details */
   media_results?: TwitterScraperEntitiesMediaResults | null;
 }
 
-/** Additional info for media entities. */
 export interface TwitterScraperEntitiesMediaAdditionalInfo {
-  /** Whether the media is monetizable. */
+  /** Whether the media is monetizable */
   monetizable?: boolean | null;
-  /** Source user information. */
+  /** Source user information */
   source_user?: Record<string, unknown> | null;
 }
 
-/** External media availability status. */
 export interface TwitterScraperEntitiesMediaExtAvailability {
-  /** Availability status string. */
+  /** Availability status */
   status?: string | null;
 }
 
-/** Media features such as face detection results by size. */
 export interface TwitterScraperEntitiesMediaFeatures {
-  /** Features for large size. */
+  /** Features for large size */
   large?: TwitterScraperEntitiesMediaFeature | null;
-  /** Features for medium size. */
+  /** Features for medium size */
   medium?: TwitterScraperEntitiesMediaFeature | null;
-  /** Features for small size. */
+  /** Features for small size */
   small?: TwitterScraperEntitiesMediaFeature | null;
-  /** Features for original size. */
+  /** Features for original size */
   orig?: TwitterScraperEntitiesMediaFeature | null;
 }
 
-/** Face detection results for a specific media size. */
 export interface TwitterScraperEntitiesMediaFeature {
-  /** Detected faces as rectangles. */
+  /** Detected faces in media */
   faces?: Rect[] | null;
 }
 
-/** A rectangle region (used for face detection). */
 export interface Rect {
   x: number;
   y: number;
@@ -478,186 +467,117 @@ export interface Rect {
   h: number;
 }
 
-/** Media size dimensions. */
-export interface MediaSize {
-  /** Width. */
-  w: number;
-  /** Height. */
-  h: number;
-  /** Resize strategy. */
-  resize?: string | null;
-}
-
-/** Available sizes for a media entity. */
 export interface TwitterScraperEntitiesMediaSizes {
-  /** Large size dimensions. */
+  /** Large size dimensions */
   large?: MediaSize | null;
-  /** Medium size dimensions. */
+  /** Medium size dimensions */
   medium?: MediaSize | null;
-  /** Small size dimensions. */
+  /** Small size dimensions */
   small?: MediaSize | null;
-  /** Thumbnail size dimensions. */
+  /** Thumbnail size dimensions */
   thumb?: MediaSize | null;
 }
 
-/** Original media information. */
+export interface MediaSize {
+  w: number;
+  h: number;
+  resize?: string | null;
+}
+
 export interface TwitterScraperEntitiesMediaOriginalInfo {
-  /** Original height. */
+  /** Original height */
   height: number;
-  /** Original width. */
+  /** Original width */
   width: number;
-  /** Focus rectangles. */
+  /** Focus rectangles */
   focus_rects?: Rect[] | null;
 }
 
-/** Download permission status for media. */
 export interface TwitterScraperEntitiesMediaAllowDownloadStatus {
-  /** Whether download is allowed. */
+  /** Whether download is allowed */
   allow_download?: boolean | null;
 }
 
-/** Video-specific information for media entities. */
 export interface TwitterScraperEntitiesMediaVideoInfo {
-  /** Video duration in milliseconds. */
+  /** Video duration in milliseconds */
   duration_millis?: number | null;
-  /** Aspect ratio as [width, height]. */
+  /** Aspect ratio */
   aspect_ratio?: number[] | null;
-  /** Available video quality variants. */
+  /** Available video quality variants */
   variants?: TwitterScraperEntitiesMediaVideoInfoVariant[] | null;
 }
 
-/** A video quality variant. */
 export interface TwitterScraperEntitiesMediaVideoInfoVariant {
-  /** Content type (e.g., video/mp4). */
+  /** Content type (e.g., video/mp4) */
   content_type: string;
-  /** URL of the video variant. */
+  /** Video URL */
   url: string;
-  /** Bitrate of the variant. */
+  /** Bitrate */
   bitrate?: number | null;
 }
 
-/** Media result details. */
-export interface TwitterScraperEntitiesMediaResults {
-  /** The media result object. */
-  result?: TwitterScraperEntitiesMediaResult | null;
-}
-
-/** Individual media result. */
 export interface TwitterScraperEntitiesMediaResult {
-  /** Media key identifier. */
+  /** Media key */
   media_key: string;
 }
 
-/** Represents an X (Twitter) user. */
-export interface TwitterScraperUser {
-  /** Unique user ID. */
-  id: string;
-  /** Profile URL. */
-  url?: string | null;
-  /** Display name. */
-  name?: string | null;
-  /** Username / screen name. */
-  username: string;
-  /** Account creation timestamp. */
-  created_at?: string | null;
-  /** Profile description / bio. */
-  description?: string | null;
-  /** Number of favourited tweets. */
-  favourites_count?: number | null;
-  /** Number of followers. */
-  followers_count?: number | null;
-  /** Number of accounts followed. */
-  followings_count?: number | null;
-  /** Number of lists the user is a member of. */
-  listed_count?: number | null;
-  /** Number of media uploaded. */
-  media_count?: number | null;
-  /** Profile image URL. */
-  profile_image_url?: string | null;
-  /** Profile banner URL. */
-  profile_banner_url?: string | null;
-  /** Total number of statuses (tweets). */
-  statuses_count?: number | null;
-  /** Whether the user is verified. */
-  verified?: boolean | null;
-  /** Whether the user has Blue verification. */
-  is_blue_verified?: boolean | null;
-  /** User profile entities. */
-  entities?: TwitterScraperUserEntities | null;
-  /** Whether the user allows direct messages. */
-  can_dm?: boolean | null;
-  /** Whether the user can be tagged in media. */
-  can_media_tag?: boolean | null;
-  /** User location. */
-  location?: string | null;
-  /** IDs of pinned tweets. */
-  pinned_tweet_ids?: string[] | null;
-  /** Professional account information. */
-  professional?: TwitterScraperUserProfessional | null;
+export interface TwitterScraperEntitiesMediaResults {
+  /** Media result details */
+  result?: TwitterScraperEntitiesMediaResult | null;
 }
 
-/** Entities in a user profile (description and URL). */
 export interface TwitterScraperUserEntities {
-  /** Entities in user description. */
+  /** Entities in user description */
   description?: TwitterScraperUserEntitiesDescription | null;
-  /** Entities in user profile URL. */
+  /** Entities in user profile URL */
   url?: TwitterScraperUserEntitiesDescription | null;
 }
 
-/** URL entities for a user profile section. */
 export interface TwitterScraperUserEntitiesDescription {
-  /** URLs found in the section. */
+  /** URLs in user description or profile */
   urls?: TwitterScraperEntityUrl[] | null;
 }
 
-/** Professional account information. */
 export interface TwitterScraperUserProfessional {
-  /** Professional type (e.g., Business). */
+  /** Professional type */
   professional_type: string;
-  /** Professional categories. */
+  /** Professional categories */
   category: TwitterScraperUserProfessionalCategory[];
 }
 
-/** A professional category for a user. */
 export interface TwitterScraperUserProfessionalCategory {
-  /** Category ID. */
+  /** Category ID */
   id: number;
-  /** Category name. */
+  /** Category name */
   name: string;
 }
 
-// ============================================================
+// ============================================================================
 // Error Response Types
-// ============================================================
+// ============================================================================
 
-/** Unauthorized error response. */
 export interface UnauthorizedResponse {
   detail: Record<string, string | number>;
 }
 
-/** Validation error response. */
-export interface HTTPValidationError {
-  detail?: ValidationError[];
-}
-
-/** Individual validation error. */
-export interface ValidationError {
-  loc: (string | number)[];
-  msg: string;
-  type: string;
-}
-
-/** Too many requests error response. */
 export interface TooManyRequestsResponse {
   detail: Record<string, string | number>;
 }
 
-/** Internal server error response. */
 export interface InternalServerErrorResponse {
   detail: Record<string, string | number>;
 }
 
-/** Moved permanently response. */
 export interface MovedPermanentlyResponse {
   detail: Record<string, string | number>;
+}
+
+export interface HTTPValidationError {
+  detail?: ValidationError[];
+}
+
+export interface ValidationError {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
 }

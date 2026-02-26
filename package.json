@@ -1,7 +1,7 @@
 {
   "name": "desearch-js",
-  "version": "1.0.9",
-  "description": "Datura SDK for Node.js and the browser",
+  "version": "1.1.0",
+  "description": "Desearch SDK for the Node.js",
   "publishConfig": {
     "access": "public"
   },
@@ -58,7 +58,7 @@
   "keywords": [
     "desearch"
   ],
-  "author": "leva",
+  "author": "Desearch AI",
   "bugs": {
     "url": "https://github.com/Desearch-ai/desearch.js/issues"
   },

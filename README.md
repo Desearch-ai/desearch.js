@@ -19,6 +19,7 @@ The official JavaScript SDK for the Desearch API - AI-driven search, web crawlin
 - [Retrieve Replies for a Post](#retrieve-replies-for-a-post)
 - [SERP Web Search](#serp-web-search)
 - [Crawl a URL](#crawl-a-url)
+- [Links](#links)
 
 ## Installation
 
@@ -57,7 +58,6 @@ AI-powered multi-source contextual search. Searches across web, X (Twitter), Red
 | `start_date`             | `string \| null`         | No       | `null`                       | The start date for the search query (YYYY-MM-DDTHH:MM:SSZ) |
 | `end_date`               | `string \| null`         | No       | `null`                       | The end date for the search query (YYYY-MM-DDTHH:MM:SSZ)   |
 | `date_filter`            | `DateFilterEnum \| null` | No       | `'PAST_24_HOURS'`            | Predefined date filter for search results                  |
-| `streaming`              | `boolean`                | No       | `false`                      | Always overridden to false in the SDK                      |
 | `result_type`            | `ResultTypeEnum \| null` | No       | `'LINKS_WITH_FINAL_SUMMARY'` | The result type for the search                             |
 | `system_message`         | `string \| null`         | No       | `''`                         | System message for the search                              |
 | `scoring_system_message` | `string \| null`         | No       | `null`                       | System message for scoring the response                    |
@@ -69,7 +69,6 @@ desearch
     prompt: "Bittensor",
     tools: ["web", "hackernews", "reddit", "wikipedia", "youtube", "twitter", "arxiv"],
     date_filter: "PAST_24_HOURS",
-    streaming: false,
     result_type: "LINKS_WITH_FINAL_SUMMARY",
     count: 20,
   })
@@ -363,3 +362,9 @@ desearch
     console.log(result);
   });
 ```
+
+## Links
+
+- [Desearch](https://desearch.ai)
+- [API Console](https://console.desearch.ai)
+- [API Reference](https://desearch.ai/docs/api-reference/)

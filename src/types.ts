@@ -33,8 +33,6 @@ export interface AiSearchRequest {
   end_date?: string | null;
   /** Predefined date filters for the search results */
   date_filter?: DateFilterEnum | null;
-  /** Whether to stream results (always overridden to false in the SDK) */
-  streaming?: boolean;
   /** The result type to be used for the search */
   result_type?: ResultTypeEnum | null;
   /** The system message to be used for the search */
@@ -290,7 +288,7 @@ export interface TwitterScraperTweet {
   entities?: TwitterScraperEntities | null;
   /** Extended entities for media */
   extended_entities?: TwitterScraperExtendedEntities | null;
-  /** Retweeted tweet object */
+  /** Retweeted tweet object. Available for user posts endpoint only. */
   retweet?: TwitterScraperTweet | null;
 }
 

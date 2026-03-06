@@ -16,6 +16,8 @@ import type {
   XUserPostsResponse,
   XUserRepliesParams,
   XPostRepliesParams,
+  XTrendsParams,
+  XTrendsResponse,
   WebSearchParams,
   WebSearchResultsResponse,
   WebCrawlParams,
@@ -200,6 +202,16 @@ class Desearch {
    */
   async xPostReplies(params: XPostRepliesParams): Promise<TwitterScraperTweet[] | Record<string, unknown>> {
     return this.handleRequest<TwitterScraperTweet[] | Record<string, unknown>>('GET', '/twitter/replies/post', params);
+  }
+
+  /**
+   * Retrieve trending topics on X for a given location using its WOEID (Where On Earth ID).
+   *
+   * @param params - Object containing the WOEID and optional count.
+   * @returns Trending topics with optional location metadata.
+   */
+  async xTrends(params: XTrendsParams): Promise<XTrendsResponse> {
+    return this.handleRequest<XTrendsResponse>('GET', '/twitter/trends', params);
   }
 
   /**

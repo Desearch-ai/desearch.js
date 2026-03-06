@@ -143,6 +143,13 @@ export interface XPostRepliesParams {
   query?: string;
 }
 
+export interface XTrendsParams {
+  /** The WOEID of the location (e.g. 23424977 for United States) */
+  woeid: number;
+  /** The number of trends to return (30-100) */
+  count?: number | null;
+}
+
 export interface WebSearchParams {
   /** The search query string */
   query: string;
@@ -226,6 +233,29 @@ export interface XUserPostsResponse {
   tweets: TwitterScraperTweet[];
   /** Cursor for pagination */
   next_cursor?: string | null;
+}
+
+export interface XTrendsResponse {
+  /** List of trending topics */
+  trends: XTrendItem[];
+  /** The location for which trends were retrieved */
+  woeid?: XTrendsWoeid | null;
+}
+
+export interface XTrendItem {
+  /** The name of the trending topic */
+  name: string;
+  /** The search query associated with the trend */
+  query?: string | null;
+  /** The rank of the trend */
+  rank?: number | null;
+}
+
+export interface XTrendsWoeid {
+  /** The name of the location */
+  name: string;
+  /** The WOEID (Where On Earth ID) of the location */
+  id: number;
 }
 
 export interface WebSearchResultsResponse {

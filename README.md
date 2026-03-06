@@ -17,6 +17,7 @@ The official JavaScript SDK for the Desearch API - AI-driven search, web crawlin
 - [Get X Posts by Username](#get-x-posts-by-username)
 - [Fetch User's Tweets and Replies](#fetch-users-tweets-and-replies)
 - [Retrieve Replies for a Post](#retrieve-replies-for-a-post)
+- [Get X Trends](#get-x-trends)
 - [SERP Web Search](#serp-web-search)
 - [Crawl a URL](#crawl-a-url)
 - [Links](#links)
@@ -313,6 +314,28 @@ desearch
     post_id: "1234567890",
     count: 20,
     query: "latest news on AI",
+  })
+  .then((result) => {
+    console.log(result);
+  });
+```
+
+## Get X Trends
+
+`xTrends`
+
+Retrieve trending topics on X for a given location using its WOEID (Where On Earth ID).
+
+| Parameter | Type             | Required | Default | Description                                                 |
+| --------- | ---------------- | -------- | ------- | ----------------------------------------------------------- |
+| `woeid`   | `number`         | Yes      | —       | The WOEID of the location (e.g. 23424977 for United States) |
+| `count`   | `number \| null` | No       | `30`    | The number of trends to return (30–100)                     |
+
+```typescript
+desearch
+  .xTrends({
+    woeid: 23424977,
+    count: 20,
   })
   .then((result) => {
     console.log(result);

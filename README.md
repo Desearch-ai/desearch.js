@@ -24,6 +24,13 @@ See also:
 - [docs/architecture.md](./docs/architecture.md)
 - [docs/known-issues.md](./docs/known-issues.md)
 
+## Documentation map
+
+- `README.md`: install, imports, auth, method usage, packaging, and error behavior
+- `docs/features.md`: SDK capability and method-by-method status inventory
+- `docs/architecture.md`: request flow, async model, type layout, and packaging structure
+- `docs/known-issues.md`: current limitations and integration caveats visible from source
+
 ## Import styles
 
 ### ESM
@@ -76,6 +83,11 @@ const client = new Desearch('your-api-key');
 Requests send the key in the `Authorization` header.
 
 ## API surface
+
+Method index:
+- AI search: `aiSearch`, `aiWebLinksSearch`, `aiXLinksSearch`
+- X data: `xSearch`, `xPostsByUrls`, `xPostById`, `xPostsByUser`, `xPostRetweeters`, `xUserPosts`, `xUserReplies`, `xPostReplies`, `xTrends`
+- Web: `webSearch`, `webCrawl`
 
 ### AI search
 

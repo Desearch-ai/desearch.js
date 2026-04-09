@@ -1,393 +1,318 @@
-# Desearch
+# desearch.js
 
-The official JavaScript SDK for the Desearch API - AI-driven search, web crawling, and X (Twitter) data extraction.
+Official JavaScript and TypeScript SDK for the Desearch API.
 
-## Table of Contents
+It publishes to npm as `desearch-js` and the current package version in this repo is `1.3.0`.
 
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [AI Contextual Search](#ai-contextual-search)
-- [AI Web Links Search](#ai-web-links-search)
-- [AI X Posts Links Search](#ai-x-posts-links-search)
-- [X Search](#x-search)
-- [Fetch Posts by URLs](#fetch-posts-by-urls)
-- [Retrieve Post by ID](#retrieve-post-by-id)
-- [Search X Posts by User](#search-x-posts-by-user)
-- [Get Retweeters of a Post](#get-retweeters-of-a-post)
-- [Get X Posts by Username](#get-x-posts-by-username)
-- [Fetch User's Tweets and Replies](#fetch-users-tweets-and-replies)
-- [Retrieve Replies for a Post](#retrieve-replies-for-a-post)
-- [Get X Trends](#get-x-trends)
-- [SERP Web Search](#serp-web-search)
-- [Crawl a URL](#crawl-a-url)
-- [Links](#links)
-
-## Installation
+## Install
 
 ```bash
 npm install desearch-js
 ```
 
-## Quick Start
+## What this SDK covers
 
-```typescript
-import Desearch from "desearch-js";
+The SDK wraps the public Desearch API for:
+- AI multi-source search
+- AI link retrieval for web sources and X posts
+- X data search and retrieval
+- Web SERP search
+- Web crawling
 
-const desearch = new Desearch("your-api-key");
+See also:
+- [docs/features.md](./docs/features.md)
+- [docs/architecture.md](./docs/architecture.md)
+- [docs/known-issues.md](./docs/known-issues.md)
 
-// Perform an AI-powered search
-desearch
-  .aiSearch({
-    prompt: "Latest developments in AI",
-    tools: ["web", "twitter", "reddit"],
-  })
-  .then((response) => {
-    console.log(response);
-  });
+## Import styles
+
+### ESM
+
+```ts
+import Desearch from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
 ```
 
-## AI Contextual Search
+### CommonJS
 
-`aiSearch`
+```js
+const Desearch = require('desearch-js');
 
-AI-powered multi-source contextual search. Searches across web, X (Twitter), Reddit, YouTube, HackerNews, Wikipedia, and arXiv and returns results with optional AI-generated summaries.
-
-| Parameter                | Type                     | Required | Default                      | Description                                                |
-| ------------------------ | ------------------------ | -------- | ---------------------------- | ---------------------------------------------------------- |
-| `prompt`                 | `string`                 | Yes      | —                            | Search query prompt                                        |
-| `tools`                  | `(ToolEnum \| string)[]` | Yes      | —                            | A list of tools to be used for the search                  |
-| `start_date`             | `string \| null`         | No       | `null`                       | The start date for the search query (YYYY-MM-DDTHH:MM:SSZ) |
-| `end_date`               | `string \| null`         | No       | `null`                       | The end date for the search query (YYYY-MM-DDTHH:MM:SSZ)   |
-| `date_filter`            | `DateFilterEnum \| null` | No       | `'PAST_24_HOURS'`            | Predefined date filter for search results                  |
-| `result_type`            | `ResultTypeEnum \| null` | No       | `'LINKS_WITH_FINAL_SUMMARY'` | The result type for the search                             |
-| `system_message`         | `string \| null`         | No       | `''`                         | System message for the search                              |
-| `scoring_system_message` | `string \| null`         | No       | `null`                       | System message for scoring the response                    |
-| `count`                  | `number \| null`         | No       | `10`                         | Number of results per source (10–200)                      |
-
-```typescript
-desearch
-  .aiSearch({
-    prompt: "Bittensor",
-    tools: ["web", "hackernews", "reddit", "wikipedia", "youtube", "twitter", "arxiv"],
-    date_filter: "PAST_24_HOURS",
-    result_type: "LINKS_WITH_FINAL_SUMMARY",
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+const client = new Desearch(process.env.DESEARCH_API_KEY);
 ```
 
-## AI Web Links Search
+The package exports both module formats from `dist/`:
+- CommonJS entry: `./dist/index.js`
+- ESM entry: `./dist/index.mjs`
+- Type declarations: `./dist/index.d.ts`
 
-`aiWebLinksSearch`
+## Quick start
 
-Search for raw links across web sources (web, HackerNews, Reddit, Wikipedia, YouTube, arXiv). Returns structured link results without AI summaries.
+```ts
+import Desearch from 'desearch-js';
 
-| Parameter | Type                        | Required | Default | Description                           |
-| --------- | --------------------------- | -------- | ------- | ------------------------------------- |
-| `prompt`  | `string`                    | Yes      | —       | Search query prompt                   |
-| `tools`   | `(WebToolEnum \| string)[]` | Yes      | —       | List of tools to search with          |
-| `count`   | `number \| null`            | No       | `10`    | Number of results per source (10–200) |
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
 
-```typescript
-desearch
-  .aiWebLinksSearch({
-    prompt: "What are the recent sport events?",
-    tools: ["web", "hackernews", "reddit", "wikipedia", "youtube", "arxiv"],
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+const result = await client.aiSearch({
+  prompt: 'latest Bittensor developments',
+  tools: ['web', 'twitter', 'reddit'],
+  date_filter: 'PAST_24_HOURS',
+  result_type: 'LINKS_WITH_FINAL_SUMMARY',
+  count: 10,
+});
+
+console.log(result);
 ```
 
-## AI X Posts Links Search
+## Authentication
 
-`aiXLinksSearch`
+Construct the client with your Desearch API key:
 
-Search for X (Twitter) post links matching a prompt using AI-powered models. Returns tweet objects from the miner network.
-
-| Parameter | Type             | Required | Default | Description                           |
-| --------- | ---------------- | -------- | ------- | ------------------------------------- |
-| `prompt`  | `string`         | Yes      | —       | Search query prompt                   |
-| `count`   | `number \| null` | No       | `10`    | Number of results per source (10–200) |
-
-```typescript
-desearch
-  .aiXLinksSearch({
-    prompt: "What are the recent sport events?",
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const client = new Desearch('your-api-key');
 ```
 
-## X Search
+Requests send the key in the `Authorization` header.
 
-`xSearch`
+## API surface
 
-X (Twitter) search with extensive filtering options: date range, user, language, verification status, media type (image/video/quote), and engagement thresholds (min likes, retweets, replies). Sort by Top or Latest.
+### AI search
 
-| Parameter       | Type                       | Required | Default | Description                              |
-| --------------- | -------------------------- | -------- | ------- | ---------------------------------------- |
-| `query`         | `string`                   | Yes      | —       | Advanced search query                    |
-| `sort`          | `string \| null`           | No       | `'Top'` | Sort by Top or Latest                    |
-| `user`          | `string \| null`           | No       | `null`  | User to search for                       |
-| `start_date`    | `string \| null`           | No       | `null`  | Start date in UTC (YYYY-MM-DD)           |
-| `end_date`      | `string \| null`           | No       | `null`  | End date in UTC (YYYY-MM-DD)             |
-| `lang`          | `string \| null`           | No       | `null`  | Language code (e.g., en, es, fr)         |
-| `verified`      | `boolean \| null`          | No       | `null`  | Filter for verified users                |
-| `blue_verified` | `boolean \| null`          | No       | `null`  | Filter for blue checkmark verified users |
-| `is_quote`      | `boolean \| null`          | No       | `null`  | Include only tweets with quotes          |
-| `is_video`      | `boolean \| null`          | No       | `null`  | Include only tweets with videos          |
-| `is_image`      | `boolean \| null`          | No       | `null`  | Include only tweets with images          |
-| `min_retweets`  | `number \| string \| null` | No       | `null`  | Minimum number of retweets               |
-| `min_replies`   | `number \| string \| null` | No       | `null`  | Minimum number of replies                |
-| `min_likes`     | `number \| string \| null` | No       | `null`  | Minimum number of likes                  |
-| `count`         | `number \| null`           | No       | `20`    | Number of tweets to retrieve (1–100)     |
+#### `aiSearch(payload)`
 
-```typescript
-desearch
-  .xSearch({
-    query: "Whats going on with Bittensor",
-    sort: "Top",
-    user: "elonmusk",
-    start_date: "2024-12-01",
-    end_date: "2025-02-25",
-    lang: "en",
-    verified: true,
-    blue_verified: true,
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+Runs the multi-source AI search endpoint at `POST /desearch/ai/search`.
+
+Supported request fields:
+- `prompt` (required)
+- `tools` (required): `web`, `hackernews`, `reddit`, `wikipedia`, `youtube`, `twitter`, `arxiv`
+- `start_date`
+- `end_date`
+- `date_filter`: `PAST_24_HOURS`, `PAST_2_DAYS`, `PAST_WEEK`, `PAST_2_WEEKS`, `PAST_MONTH`, `PAST_2_MONTHS`, `PAST_YEAR`, `PAST_2_YEARS`
+- `result_type`: `ONLY_LINKS`, `LINKS_WITH_FINAL_SUMMARY`
+- `system_message`
+- `scoring_system_message`
+- `count`
+
+Notes:
+- The SDK strips any incoming `streaming` flag and always sends `streaming: false`.
+- Response type is broad and may be structured JSON or a string depending on the API response.
+
+```ts
+const result = await client.aiSearch({
+  prompt: 'recent AI chip announcements',
+  tools: ['web', 'hackernews', 'reddit', 'twitter'],
+  result_type: 'LINKS_WITH_FINAL_SUMMARY',
+  count: 20,
+});
 ```
 
-## Fetch Posts by URLs
+#### `aiWebLinksSearch(payload)`
 
-`xPostsByUrls`
+Runs `POST /desearch/ai/search/links/web` for web-only link retrieval.
 
-Fetch full post data for a list of X (Twitter) post URLs. Returns metadata, content, and engagement metrics for each URL.
-
-| Parameter | Type       | Required | Default | Description                   |
-| --------- | ---------- | -------- | ------- | ----------------------------- |
-| `urls`    | `string[]` | Yes      | —       | List of post URLs to retrieve |
-
-```typescript
-desearch
-  .xPostsByUrls({
-    urls: ["https://x.com/RacingTriple/status/1892527552029499853"],
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const result = await client.aiWebLinksSearch({
+  prompt: 'open source browser automation tools',
+  tools: ['web', 'hackernews', 'reddit', 'youtube'],
+  count: 20,
+});
 ```
 
-## Retrieve Post by ID
+#### `aiXLinksSearch(payload)`
 
-`xPostById`
+Runs `POST /desearch/ai/search/links/twitter` for AI-assisted X link retrieval.
 
-Fetch a single X (Twitter) post by its unique ID. Returns metadata, content, and engagement metrics.
-
-| Parameter | Type     | Required | Default | Description               |
-| --------- | -------- | -------- | ------- | ------------------------- |
-| `id`      | `string` | Yes      | —       | The unique ID of the post |
-
-```typescript
-desearch
-  .xPostById({
-    id: "1892527552029499853",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const result = await client.aiXLinksSearch({
+  prompt: 'Bittensor subnet updates',
+  count: 20,
+});
 ```
 
-## Search X Posts by User
+### X endpoints
 
-`xPostsByUser`
+#### `xSearch(params)`
 
-Search X (Twitter) posts by a specific user, with optional keyword filtering.
+Runs `GET /twitter`.
 
-| Parameter | Type     | Required | Default | Description                          |
-| --------- | -------- | -------- | ------- | ------------------------------------ |
-| `user`    | `string` | Yes      | —       | User to search for                   |
-| `query`   | `string` | No       | `''`    | Advanced search query                |
-| `count`   | `number` | No       | `10`    | Number of tweets to retrieve (1–100) |
+Useful filters include:
+- `query`
+- `sort`
+- `user`
+- `start_date`, `end_date`
+- `lang`
+- `verified`, `blue_verified`
+- `is_quote`, `is_video`, `is_image`
+- `min_retweets`, `min_replies`, `min_likes`
+- `count`
 
-```typescript
-desearch
-  .xPostsByUser({
-    user: "elonmusk",
-    query: "Whats going on with Bittensor",
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const tweets = await client.xSearch({
+  query: 'bittensor',
+  sort: 'Top',
+  lang: 'en',
+  min_likes: 50,
+  count: 20,
+});
 ```
 
-## Get Retweeters of a Post
+#### `xPostsByUrls(params)`
 
-`xPostRetweeters`
+Runs `GET /twitter/urls`.
 
-Retrieve the list of users who retweeted a specific post by its ID. Supports cursor-based pagination.
-
-| Parameter | Type             | Required | Default | Description                              |
-| --------- | ---------------- | -------- | ------- | ---------------------------------------- |
-| `id`      | `string`         | Yes      | —       | The ID of the post to get retweeters for |
-| `cursor`  | `string \| null` | No       | `null`  | Cursor for pagination                    |
-
-```typescript
-desearch
-  .xPostRetweeters({
-    id: "1982770537081532854",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const tweets = await client.xPostsByUrls({
+  urls: ['https://x.com/DesearchAI/status/1234567890123456789'],
+});
 ```
 
-## Get X Posts by Username
+#### `xPostById(params)`
 
-`xUserPosts`
+Runs `GET /twitter/post`.
 
-Retrieve a user's timeline posts by their username. Fetches the latest tweets posted by that user. Supports cursor-based pagination.
-
-| Parameter  | Type             | Required | Default | Description                 |
-| ---------- | ---------------- | -------- | ------- | --------------------------- |
-| `username` | `string`         | Yes      | —       | Username to fetch posts for |
-| `cursor`   | `string \| null` | No       | `null`  | Cursor for pagination       |
-
-```typescript
-desearch
-  .xUserPosts({
-    username: "elonmusk",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const tweet = await client.xPostById({
+  id: '1234567890123456789',
+});
 ```
 
-## Fetch User's Tweets and Replies
+#### `xPostsByUser(params)`
 
-`xUserReplies`
+Runs `GET /twitter/post/user`.
 
-Fetch tweets and replies posted by a specific user, with optional keyword filtering.
-
-| Parameter | Type     | Required | Default | Description                            |
-| --------- | -------- | -------- | ------- | -------------------------------------- |
-| `user`    | `string` | Yes      | —       | The username of the user to search for |
-| `count`   | `number` | No       | `10`    | The number of tweets to fetch (1–100)  |
-| `query`   | `string` | No       | `''`    | Advanced search query                  |
-
-```typescript
-desearch
-  .xUserReplies({
-    user: "elonmusk",
-    count: 20,
-    query: "latest news on AI",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const tweets = await client.xPostsByUser({
+  user: 'DesearchAI',
+  query: 'launch',
+  count: 10,
+});
 ```
 
-## Retrieve Replies for a Post
+#### `xPostRetweeters(params)`
 
-`xPostReplies`
+Runs `GET /twitter/post/retweeters`.
 
-Fetch replies to a specific X (Twitter) post by its post ID.
-
-| Parameter | Type     | Required | Default | Description                           |
-| --------- | -------- | -------- | ------- | ------------------------------------- |
-| `post_id` | `string` | Yes      | —       | The ID of the post to search for      |
-| `count`   | `number` | No       | `10`    | The number of tweets to fetch (1–100) |
-| `query`   | `string` | No       | `''`    | Advanced search query                 |
-
-```typescript
-desearch
-  .xPostReplies({
-    post_id: "1234567890",
-    count: 20,
-    query: "latest news on AI",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const retweeters = await client.xPostRetweeters({
+  id: '1234567890123456789',
+});
 ```
 
-## Get X Trends
+#### `xUserPosts(params)`
 
-`xTrends`
+Runs `GET /twitter/user/posts`.
 
-Retrieve trending topics on X for a given location using its WOEID (Where On Earth ID).
-
-| Parameter | Type             | Required | Default | Description                                                 |
-| --------- | ---------------- | -------- | ------- | ----------------------------------------------------------- |
-| `woeid`   | `number`         | Yes      | —       | The WOEID of the location (e.g. 23424977 for United States) |
-| `count`   | `number \| null` | No       | `30`    | The number of trends to return (30–100)                     |
-
-```typescript
-desearch
-  .xTrends({
-    woeid: 23424977,
-    count: 20,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const timeline = await client.xUserPosts({
+  username: 'DesearchAI',
+});
 ```
 
-## SERP Web Search
+#### `xUserReplies(params)`
 
-`webSearch`
+Runs `GET /twitter/replies`.
 
-SERP web search. Returns paginated web search results, replicating a typical search engine experience.
-
-| Parameter | Type     | Required | Default | Description                                               |
-| --------- | -------- | -------- | ------- | --------------------------------------------------------- |
-| `query`   | `string` | Yes      | —       | The search query string                                   |
-| `start`   | `number` | No       | `0`     | How many results to skip for pagination (0, 10, 20, etc.) |
-
-```typescript
-desearch
-  .webSearch({
-    query: "latest news on AI",
-    start: 10,
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const replies = await client.xUserReplies({
+  user: 'DesearchAI',
+  count: 20,
+});
 ```
 
-## Crawl a URL
+#### `xPostReplies(params)`
 
-`webCrawl`
+Runs `GET /twitter/replies/post`.
 
-Crawl a URL and return its content as plain text or HTML.
-
-| Parameter | Type               | Required | Default  | Description                          |
-| --------- | ------------------ | -------- | -------- | ------------------------------------ |
-| `url`     | `string`           | Yes      | —        | URL to crawl                         |
-| `format`  | `'html' \| 'text'` | No       | `'text'` | Format of the content to be returned |
-
-```typescript
-desearch
-  .webCrawl({
-    url: "https://en.wikipedia.org/wiki/Artificial_intelligence",
-    format: "html",
-  })
-  .then((result) => {
-    console.log(result);
-  });
+```ts
+const replies = await client.xPostReplies({
+  post_id: '1234567890123456789',
+  count: 20,
+});
 ```
+
+#### `xTrends(params)`
+
+Runs `GET /twitter/trends`.
+
+```ts
+const trends = await client.xTrends({
+  woeid: 23424977,
+  count: 30,
+});
+```
+
+### Web endpoints
+
+#### `webSearch(params)`
+
+Runs `GET /web`.
+
+```ts
+const results = await client.webSearch({
+  query: 'site:desearch.ai sdk docs',
+  start: 0,
+});
+```
+
+#### `webCrawl(params)`
+
+Runs `GET /web/crawl` and returns text or HTML as a string.
+
+```ts
+const page = await client.webCrawl({
+  url: 'https://desearch.ai',
+  format: 'text',
+});
+```
+
+## TypeScript
+
+The package ships its own declaration file and exports request and response shapes from `src/types.ts` into the generated `dist/index.d.ts` bundle.
+
+Important exported type families include:
+- search request types
+- X request and response types
+- web search and crawl types
+- detailed `TwitterScraperTweet` and `TwitterScraperUser` models
+- error payload types such as `HTTPValidationError`
+
+## Error handling
+
+Non-2xx responses throw `Error` with the format:
+
+```txt
+HTTP <status>: <response body>
+```
+
+Other failures are wrapped as:
+
+```txt
+Unexpected Error: <message>
+```
+
+Example:
+
+```ts
+try {
+  await client.webSearch({ query: 'desearch' });
+} catch (error) {
+  console.error(error);
+}
+```
+
+## Development
+
+Available scripts from `package.json`:
+- `npm run build`
+- `npm run build-fast`
+- `npm test`
+- `npm run generate-docs`
+- `npm run publish:beta`
+- `npm run publish:stable`
 
 ## Links
 
-- [Desearch](https://desearch.ai)
-- [API Console](https://console.desearch.ai)
-- [API Reference](https://desearch.ai/docs/api-reference/)
+- <https://github.com/Desearch-ai/desearch.js>
+- <https://desearch.ai>
+- <https://console.desearch.ai>

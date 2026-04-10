@@ -2,26 +2,50 @@
 
 ## Overview
 
-`desearch.js` is a small API wrapper centered around a single `Desearch` class in `src/index.ts`.
+`desearch.js` is a thin TypeScript SDK with a deliberately small implementation footprint.
 
-The architecture is intentionally thin:
-- one client class
-- one internal request helper
-- one shared type module
-- generated dist output for CommonJS, ESM, and declarations
+The current architecture is built from four main pieces:
+- `src/index.ts` for the client implementation
+- `src/types.ts` for the exported type contracts
+- `tsup.config.ts` for package builds
+- `package.json` for scripts, exports, and npm metadata
 
-This keeps the package small and easy to audit, but it also means most behavior is delegated directly to the upstream API.
+The core design choice is simplicity. Most SDK behavior is a direct translation from typed method input to HTTP request, then from HTTP response back to the caller.
 
-## Module layout
+## Source layout
 
-- `src/index.ts`: client implementation and exported default class
-- `src/types.ts`: request, response, entity, and error interfaces
-- `package.json`: package exports, scripts, and publish configuration
-- `tsup.config.ts`: build pipeline configuration for `dist/`
+### `src/index.ts`
+
+This file contains:
+- the fixed `BASE_URL`
+- the `Desearch` class
+- the shared private `handleRequest<T>()` helper
+- all 13 public SDK methods
+
+Those public methods fall into three groups:
+- AI search methods
+- X or Twitter methods
+- web methods
+
+### `src/types.ts`
+
+This file contains the exported type surface, including:
+- request interfaces
+- response interfaces
+- literal union types for API options
+- nested X tweet and user models
+- API error payload types
+
+The repo is more type-heavy than implementation-heavy. Most of its complexity exists to make the HTTP API easier to consume from TypeScript.
+
+### Packaging files
+
+- `tsup.config.ts` compiles `src/index.ts` into CJS and ESM output, with declaration files, sourcemaps, and a clean build directory
+- `package.json` exposes those build artifacts through `main`, `module`, `types`, and conditional `exports`
 
 ## Client design
 
-The public entry point is:
+The SDK exposes one public class:
 
 ```ts
 class Desearch {
@@ -30,102 +54,114 @@ class Desearch {
 }
 ```
 
-### Construction
+### Constructor behavior
 
-The constructor takes one value:
-- `apiKey: string`
+```ts
+constructor(apiKey: string) {
+  this.baseURL = BASE_URL;
+  this.apiKey = apiKey;
+}
+```
 
-At construction time the class stores:
-- `baseURL = 'https://api.desearch.ai'`
-- `apiKey`
+Key consequences of that design:
+- the constructor only accepts an API key
+- the base URL is not configurable per instance
+- authentication is implemented as a raw `Authorization` header value
 
-The base URL is fixed inside the SDK rather than configured per instance.
+That keeps construction simple, but it makes staging, local, or self-hosted targets non-configurable from the public API.
 
-## Request pipeline
+## Request flow
 
-All public methods delegate to a single private helper:
+Every public method delegates to:
 
 ```ts
 private async handleRequest<T>(method: string, path: string, payload?: unknown): Promise<T>
 ```
 
-That helper is responsible for:
-- building the final request URL from `baseURL + path`
-- attaching the `Authorization` header with the raw API key
-- serializing GET payloads into `URLSearchParams`
-- serializing POST payloads with `JSON.stringify`
-- selecting JSON parsing vs text parsing from the response `content-type`
-- normalizing thrown errors
+That helper owns the full transport flow.
 
-### GET requests
+### 1. URL construction
 
-For GET methods, the helper:
-- ignores `undefined` and `null` values
-- appends scalar values as query params
-- appends arrays by repeating the same key multiple times
+The final request URL is built from:
+- `this.baseURL`
+- the endpoint path passed by the public method
 
-That repeated-key behavior matters for calls like `xPostsByUrls`, where `urls` is sent as a GET query array.
+### 2. Header construction
 
-### POST requests
+All requests include:
 
-For POST methods, the helper:
-- sets `Content-Type: application/json`
-- sends the payload as a JSON string body
-
-### Response parsing
-
-If the response content type contains `application/json`, the SDK returns `await response.json()`.
-
-Otherwise it falls back to `await response.text()`.
-
-This is why `webCrawl` returns `Promise<string>` even though most other methods return JSON-shaped data.
-
-### Error model
-
-The helper distinguishes between HTTP failures and other exceptions:
-- HTTP failures become `Error('HTTP <status>: <body>')`
-- all other failures become `Error('Unexpected Error: <message>')`
-
-There are type definitions for common API error payloads in `src/types.ts`, but they are not instantiated as typed runtime error classes.
-
-## Async design
-
-Every SDK method is asynchronous and returns a `Promise`.
-
-There is no internal queue, retry layer, or cancellation abstraction. The async model is just direct request-response execution on top of `undici`'s `fetch`.
-
-Implications:
-- callers own concurrency control
-- callers own retry strategy
-- callers own timeout strategy
-- callers can use `await` or standard promise chaining
-
-### `aiSearch` special case
-
-`aiSearch` is the only method with extra request shaping.
-
-It removes any incoming `streaming` field from the caller payload and always sends:
-
-```json
-{ "streaming": false }
+```ts
+{ Authorization: this.apiKey }
 ```
 
-That means the current client intentionally forces non-streaming behavior even if upstream API support expands.
+For POST requests only, the helper also adds:
 
-## Public API structure
+```ts
+{ 'Content-Type': 'application/json' }
+```
 
-The class groups naturally into three areas.
+### 3. GET serialization
+
+For GET requests, payload objects are converted to `URLSearchParams`.
+
+Behavior in the current code:
+- `undefined` and `null` values are skipped
+- scalar values are stringified and appended once
+- array values are serialized by repeating the same key
+
+That repeated-key encoding is especially important for `xPostsByUrls`, which sends multiple `urls` values on a GET route.
+
+### 4. POST serialization
+
+For POST requests, payloads are sent with:
+- `JSON.stringify(payload)`
+- `Content-Type: application/json`
+
+### 5. Response parsing
+
+The helper checks `response.headers.get('content-type')`.
+
+Behavior:
+- if the content type contains `application/json`, the SDK returns `response.json()`
+- otherwise it returns `response.text()`
+
+This is why `webCrawl()` returns `Promise<string>` while most other methods return JSON-shaped data.
+
+### 6. Error normalization
+
+The helper uses two error paths:
+- HTTP failures become `Error('HTTP <status>: <body>')`
+- everything else becomes `Error('Unexpected Error: <message>')`
+
+Why this matters:
+- callers get a consistent thrown message shape
+- callers do not get typed SDK error classes or structured error instances
+
+## Method groups
 
 ### AI search methods
 
+These use POST requests with JSON bodies:
 - `aiSearch`
 - `aiWebLinksSearch`
 - `aiXLinksSearch`
 
-These use POST requests and structured JSON bodies.
+#### `aiSearch` special behavior
 
-### X data methods
+`aiSearch` is the only method that changes caller input before sending it.
 
+It does this:
+
+```ts
+const { streaming, ...rest } = payload as AiSearchRequest & { streaming?: boolean };
+const body = { ...rest, streaming: false };
+```
+
+So even if a caller tries to send `streaming: true`, the SDK forces non-streaming behavior.
+
+### X or Twitter methods
+
+These use GET requests with query-string serialization:
 - `xSearch`
 - `xPostsByUrls`
 - `xPostById`
@@ -136,117 +172,113 @@ These use POST requests and structured JSON bodies.
 - `xPostReplies`
 - `xTrends`
 
-These use GET requests with query-string serialization.
+The X section also drives most of the type complexity in `src/types.ts`, because tweet and user payloads have many nested fields.
 
 ### Web methods
 
+These use GET requests:
 - `webSearch`
 - `webCrawl`
 
-These are also GET requests.
+The main difference is the response shape:
+- `webSearch` expects JSON
+- `webCrawl` can return text or HTML, and the SDK treats non-JSON responses as text
 
-## TypeScript type system
+## Type-system design
 
-`src/types.ts` is the schema backbone of the SDK.
+The type layer follows a few clear patterns.
 
-It provides four main type layers.
+### Literal unions instead of runtime enums
 
-### 1. Literal types and enums
-
-These constrain common API fields:
+Examples:
 - `ToolEnum`
 - `WebToolEnum`
 - `DateFilterEnum`
 - `ResultTypeEnum`
 
-These are string literal unions, not runtime enums, so they disappear at build time and keep bundle overhead low.
+Why:
+- they provide compile-time constraints without adding runtime bundle code
 
-### 2. Request contracts
+### One request type per method family
 
-Each public method takes a matching request interface. Examples:
+Examples:
 - `AiSearchRequest`
 - `XSearchParams`
 - `WebCrawlParams`
 
-This keeps the call sites strongly typed for TypeScript consumers.
+Why:
+- the SDK is mostly a typed transport wrapper, so request contracts are a big part of the package value
 
-### 3. Response contracts
+### Detailed X models
 
-The SDK models both high-level and endpoint-specific responses, including:
-- aggregated search response shapes
-- web result collections
-- X timeline and retweeter collections
-- trends responses
-
-One deliberate weak spot is `AiSearchResponse`, which remains permissive because the upstream response can vary.
-
-### 4. Rich X entity models
-
-The largest share of the type file documents nested tweet and user data:
-- tweet metadata
-- media payloads
-- entities and mentions
-- profile metadata
-- professional categories
+The largest type investment is in X payload modeling:
+- tweets
+- users
+- entities
+- media metadata
+- professional info
 - pagination cursors
 
-This is the most structurally detailed part of the SDK.
+Why:
+- these endpoints return the richest nested structures in the repo
 
-## Packaging and distribution
+### Deliberately broad AI response typing
 
-`package.json` configures the package for npm distribution.
+```ts
+export type AiSearchResponse = ResponseData | Record<string, unknown> | string;
+```
 
-Key packaging details:
-- package name: `desearch-js`
-- current version: `1.3.0`
-- public npm publish config
-- `main`: `./dist/index.js`
-- `module`: `./dist/index.mjs`
-- `types`: `./dist/index.d.ts`
-- conditional `exports` for `require` and `import`
+Why:
+- the upstream AI response shape is not modeled as a strict discriminated union in this SDK
+- the package reflects the API surface instead of imposing a narrower runtime contract
+
+## Packaging architecture
+
+The package is configured for npm distribution with:
+- `name: desearch-js`
+- `main: ./dist/index.js`
+- `module: ./dist/index.mjs`
+- `types: ./dist/index.d.ts`
+- conditional `exports` for both `require` and `import`
 
 This gives consumers:
-- CommonJS compatibility
-- ESM compatibility
-- bundled type declarations
+- CommonJS support
+- ESM support
+- bundled TypeScript declarations
 
-## Build system
+## Key design decisions
 
-The repo uses `tsup` to compile `src/index.ts` into distributable artifacts.
+### Thin wrapper instead of a framework-style SDK
 
-Relevant scripts:
-- `build-fast`: cjs + esm
-- `build`: default tsup build
-- `generate-docs`: TypeDoc markdown output
-- `test`: Vitest run
+Why:
+- the repo exposes a modest set of public endpoints
+- keeping transport logic centralized makes the package easy to audit
+- most behavior stays close to the HTTP API instead of inventing SDK-only abstractions
 
-The package is small enough that there is no multi-package workspace, code generation layer, or custom runtime transport abstraction.
+Tradeoff:
+- fewer convenience features for callers
+- fewer extension points for advanced consumers
 
-## Architectural tradeoffs
+### Fixed production base URL instead of per-instance configuration
 
-### Strengths
+Why:
+- the constructor stays minimal
+- package behavior is predictable across integrations
+- the repo is currently positioned as a direct client for the public hosted API
 
-- very small surface area
-- easy to read and maintain
-- good TypeScript coverage for payloads and X entities
-- dual-module packaging is already in place
+Tradeoff:
+- staging, local, and self-hosted targets are not first-class
+- advanced consumers must wrap or patch the SDK if they need alternate environments
 
-### Limitations
+### Node transport via `undici`
 
-- hard-coded production base URL
-- no transport customization hooks
-- no middleware or interceptors
-- no streaming implementation
-- no typed runtime error classes
-- no retries, backoff, timeout configuration, or abort support surfaced by the class
+Why:
+- the SDK is explicitly described as Node.js-focused in package metadata
+- `undici` gives a predictable fetch implementation in Node
+- the current source avoids introducing a broader transport abstraction layer
 
-## Recommended mental model
+Tradeoff:
+- browser-first use cases are not the primary target
+- changing transport later would require a public API decision
 
-Treat `desearch.js` as a typed convenience wrapper around the HTTP API, not as a heavy SDK framework.
-
-It is best for:
-- server-side Node usage
-- scripts and backend services
-- apps that want typed request payloads and response shapes with minimal abstraction
-
-If you need advanced transport control, you currently have to add it outside the SDK or change the client implementation itself.
+For the formal record of these decisions, see [ADR 0001](./decisions/0001-thin-node-sdk-transport.md).

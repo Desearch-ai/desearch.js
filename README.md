@@ -1,60 +1,42 @@
 # desearch.js
 
-Official JavaScript and TypeScript SDK for the Desearch API.
+Official JavaScript and TypeScript SDK for the Desearch public API.
 
-It publishes to npm as `desearch-js` and the current package version in this repo is `1.3.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.3.0`.
 
-## Install
+Related docs:
+- [docs/features.md](./docs/features.md)
+- [docs/architecture.md](./docs/architecture.md)
+- [docs/known-issues.md](./docs/known-issues.md)
+- [docs/decisions/0001-thin-node-sdk-transport.md](./docs/decisions/0001-thin-node-sdk-transport.md)
+
+## Package purpose
+
+`desearch.js` is a thin, Node-oriented SDK for the Desearch API. It wraps the public read-side endpoints implemented in `src/index.ts` behind one `Desearch` client class and ships a typed surface from `src/types.ts`.
+
+What it covers today:
+- AI multi-source search
+- AI web-links search
+- AI X-links search
+- X search and lookup endpoints
+- web search
+- web crawl
+
+What it does not try to be:
+- a browser-first SDK
+- a configurable transport layer
+- a write or mutation client
+- a framework with retries, pagination helpers, or runtime validation
+
+## Quick Start
+
+### Install
 
 ```bash
 npm install desearch-js
 ```
 
-## What this SDK covers
-
-The SDK wraps the public Desearch API for:
-- AI multi-source search
-- AI link retrieval for web sources and X posts
-- X data search and retrieval
-- Web SERP search
-- Web crawling
-
-See also:
-- [docs/features.md](./docs/features.md)
-- [docs/architecture.md](./docs/architecture.md)
-- [docs/known-issues.md](./docs/known-issues.md)
-
-## Documentation map
-
-- `README.md`: install, imports, auth, method usage, packaging, and error behavior
-- `docs/features.md`: SDK capability and method-by-method status inventory
-- `docs/architecture.md`: request flow, async model, type layout, and packaging structure
-- `docs/known-issues.md`: current limitations and integration caveats visible from source
-
-## Import styles
-
-### ESM
-
-```ts
-import Desearch from 'desearch-js';
-
-const client = new Desearch(process.env.DESEARCH_API_KEY!);
-```
-
-### CommonJS
-
-```js
-const Desearch = require('desearch-js');
-
-const client = new Desearch(process.env.DESEARCH_API_KEY);
-```
-
-The package exports both module formats from `dist/`:
-- CommonJS entry: `./dist/index.js`
-- ESM entry: `./dist/index.mjs`
-- Type declarations: `./dist/index.d.ts`
-
-## Quick start
+### ESM usage
 
 ```ts
 import Desearch from 'desearch-js';
@@ -72,43 +54,52 @@ const result = await client.aiSearch({
 console.log(result);
 ```
 
+### CommonJS usage
+
+```js
+const Desearch = require('desearch-js').default;
+
+const client = new Desearch(process.env.DESEARCH_API_KEY);
+```
+
 ## Authentication
 
-Construct the client with your Desearch API key:
+The constructor accepts a single argument, your API key:
 
 ```ts
 const client = new Desearch('your-api-key');
 ```
 
-Requests send the key in the `Authorization` header.
+The SDK sends that value as the `Authorization` header on every request.
 
-## API surface
+## API overview
 
-Method index:
-- AI search: `aiSearch`, `aiWebLinksSearch`, `aiXLinksSearch`
-- X data: `xSearch`, `xPostsByUrls`, `xPostById`, `xPostsByUser`, `xPostRetweeters`, `xUserPosts`, `xUserReplies`, `xPostReplies`, `xTrends`
-- Web: `webSearch`, `webCrawl`
+### AI search methods
+
+- `aiSearch(payload)` → `POST /desearch/ai/search`
+- `aiWebLinksSearch(payload)` → `POST /desearch/ai/search/links/web`
+- `aiXLinksSearch(payload)` → `POST /desearch/ai/search/links/twitter`
+
+### X methods
+
+- `xSearch(params)` → `GET /twitter`
+- `xPostsByUrls(params)` → `GET /twitter/urls`
+- `xPostById(params)` → `GET /twitter/post`
+- `xPostsByUser(params)` → `GET /twitter/post/user`
+- `xPostRetweeters(params)` → `GET /twitter/post/retweeters`
+- `xUserPosts(params)` → `GET /twitter/user/posts`
+- `xUserReplies(params)` → `GET /twitter/replies`
+- `xPostReplies(params)` → `GET /twitter/replies/post`
+- `xTrends(params)` → `GET /twitter/trends`
+
+### Web methods
+
+- `webSearch(params)` → `GET /web`
+- `webCrawl(params)` → `GET /web/crawl`
+
+## Usage examples
 
 ### AI search
-
-#### `aiSearch(payload)`
-
-Runs the multi-source AI search endpoint at `POST /desearch/ai/search`.
-
-Supported request fields:
-- `prompt` (required)
-- `tools` (required): `web`, `hackernews`, `reddit`, `wikipedia`, `youtube`, `twitter`, `arxiv`
-- `start_date`
-- `end_date`
-- `date_filter`: `PAST_24_HOURS`, `PAST_2_DAYS`, `PAST_WEEK`, `PAST_2_WEEKS`, `PAST_MONTH`, `PAST_2_MONTHS`, `PAST_YEAR`, `PAST_2_YEARS`
-- `result_type`: `ONLY_LINKS`, `LINKS_WITH_FINAL_SUMMARY`
-- `system_message`
-- `scoring_system_message`
-- `count`
-
-Notes:
-- The SDK strips any incoming `streaming` flag and always sends `streaming: false`.
-- Response type is broad and may be structured JSON or a string depending on the API response.
 
 ```ts
 const result = await client.aiSearch({
@@ -119,45 +110,30 @@ const result = await client.aiSearch({
 });
 ```
 
-#### `aiWebLinksSearch(payload)`
+Notes:
+- `tools` accepts the source names defined in `src/types.ts`: `web`, `hackernews`, `reddit`, `wikipedia`, `youtube`, `twitter`, `arxiv`
+- `aiSearch` always sends `streaming: false`, even if a caller tries to add a `streaming` field manually
 
-Runs `POST /desearch/ai/search/links/web` for web-only link retrieval.
+### AI web links search
 
 ```ts
-const result = await client.aiWebLinksSearch({
+const links = await client.aiWebLinksSearch({
   prompt: 'open source browser automation tools',
   tools: ['web', 'hackernews', 'reddit', 'youtube'],
   count: 20,
 });
 ```
 
-#### `aiXLinksSearch(payload)`
-
-Runs `POST /desearch/ai/search/links/twitter` for AI-assisted X link retrieval.
+### AI X links search
 
 ```ts
-const result = await client.aiXLinksSearch({
+const xLinks = await client.aiXLinksSearch({
   prompt: 'Bittensor subnet updates',
   count: 20,
 });
 ```
 
-### X endpoints
-
-#### `xSearch(params)`
-
-Runs `GET /twitter`.
-
-Useful filters include:
-- `query`
-- `sort`
-- `user`
-- `start_date`, `end_date`
-- `lang`
-- `verified`, `blue_verified`
-- `is_quote`, `is_video`, `is_image`
-- `min_retweets`, `min_replies`, `min_likes`
-- `count`
+### X search
 
 ```ts
 const tweets = await client.xSearch({
@@ -169,9 +145,7 @@ const tweets = await client.xSearch({
 });
 ```
 
-#### `xPostsByUrls(params)`
-
-Runs `GET /twitter/urls`.
+### X posts by URL
 
 ```ts
 const tweets = await client.xPostsByUrls({
@@ -179,86 +153,7 @@ const tweets = await client.xPostsByUrls({
 });
 ```
 
-#### `xPostById(params)`
-
-Runs `GET /twitter/post`.
-
-```ts
-const tweet = await client.xPostById({
-  id: '1234567890123456789',
-});
-```
-
-#### `xPostsByUser(params)`
-
-Runs `GET /twitter/post/user`.
-
-```ts
-const tweets = await client.xPostsByUser({
-  user: 'DesearchAI',
-  query: 'launch',
-  count: 10,
-});
-```
-
-#### `xPostRetweeters(params)`
-
-Runs `GET /twitter/post/retweeters`.
-
-```ts
-const retweeters = await client.xPostRetweeters({
-  id: '1234567890123456789',
-});
-```
-
-#### `xUserPosts(params)`
-
-Runs `GET /twitter/user/posts`.
-
-```ts
-const timeline = await client.xUserPosts({
-  username: 'DesearchAI',
-});
-```
-
-#### `xUserReplies(params)`
-
-Runs `GET /twitter/replies`.
-
-```ts
-const replies = await client.xUserReplies({
-  user: 'DesearchAI',
-  count: 20,
-});
-```
-
-#### `xPostReplies(params)`
-
-Runs `GET /twitter/replies/post`.
-
-```ts
-const replies = await client.xPostReplies({
-  post_id: '1234567890123456789',
-  count: 20,
-});
-```
-
-#### `xTrends(params)`
-
-Runs `GET /twitter/trends`.
-
-```ts
-const trends = await client.xTrends({
-  woeid: 23424977,
-  count: 30,
-});
-```
-
-### Web endpoints
-
-#### `webSearch(params)`
-
-Runs `GET /web`.
+### Web search
 
 ```ts
 const results = await client.webSearch({
@@ -267,9 +162,7 @@ const results = await client.webSearch({
 });
 ```
 
-#### `webCrawl(params)`
-
-Runs `GET /web/crawl` and returns text or HTML as a string.
+### Web crawl
 
 ```ts
 const page = await client.webCrawl({
@@ -278,26 +171,60 @@ const page = await client.webCrawl({
 });
 ```
 
-## TypeScript
+## Tech stack
 
-The package ships its own declaration file and exports request and response shapes from `src/types.ts` into the generated `dist/index.d.ts` bundle.
+- TypeScript `^5.9.3`
+- `undici` `>=5` for HTTP transport
+- `dotenv` `^17.3.1` as a runtime dependency in `package.json`
+- `tsup` `^8.5.1` for bundling
+- `vitest` `^4.0.18` for tests
+- `typedoc` `^0.28.17`
+- `typedoc-plugin-markdown` `^4.10.0`
+- output targets: CommonJS, ESM, and bundled declaration files
 
-Important exported type families include:
-- search request types
-- X request and response types
-- web search and crawl types
-- detailed `TwitterScraperTweet` and `TwitterScraperUser` models
-- error payload types such as `HTTPValidationError`
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run build` | Build `dist/` with tsup using the config in `tsup.config.ts` |
+| `npm run build-fast` | Build `src/index.ts` directly into CJS and ESM without the full default tsup command |
+| `npm test` | Run the Vitest test suite |
+| `npm run generate-docs` | Generate markdown API docs from `src/index.ts` using TypeDoc |
+| `npm run build:beta` | Build for beta publishing |
+| `npm run version:beta` | Bump a beta prerelease version |
+| `npm run version:stable` | Bump a stable patch version |
+| `npm run publish:beta` | Version, build, and publish with the `beta` npm tag |
+| `npm run publish:stable` | Version, build, and publish as the default release |
+| `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
+
+## Architecture overview
+
+Source layout:
+- `src/index.ts`, the `Desearch` client plus the shared `handleRequest<T>()` transport helper
+- `src/types.ts`, request/response contracts and X entity models
+- `tsup.config.ts`, build output configuration
+- `package.json`, scripts, exports, dependency versions, and package metadata
+
+Key design decisions in the current source:
+- one shared request helper powers every public method
+- GET payloads are serialized through `URLSearchParams`
+- POST payloads are serialized as JSON
+- response parsing switches between JSON and text based on `content-type`
+- `webCrawl()` returns text while most other methods return JSON-shaped data
+- the base URL is fixed to `https://api.desearch.ai`
+- `aiSearch()` forcibly disables streaming
+
+See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.
 
 ## Error handling
 
-Non-2xx responses throw `Error` with the format:
+HTTP failures are thrown as plain `Error` instances in this format:
 
 ```txt
 HTTP <status>: <response body>
 ```
 
-Other failures are wrapped as:
+Non-HTTP failures are wrapped as:
 
 ```txt
 Unexpected Error: <message>
@@ -313,18 +240,19 @@ try {
 }
 ```
 
-## Development
+## Package outputs
 
-Available scripts from `package.json`:
-- `npm run build`
-- `npm run build-fast`
-- `npm test`
-- `npm run generate-docs`
-- `npm run publish:beta`
-- `npm run publish:stable`
+`package.json` exports:
+- `./dist/index.js` for CommonJS
+- `./dist/index.mjs` for ESM
+- `./dist/index.d.ts` for TypeScript declarations
 
-## Links
+## Known limitations
 
-- <https://github.com/Desearch-ai/desearch.js>
-- <https://desearch.ai>
-- <https://console.desearch.ai>
+Current limitations include:
+- no configurable base URL
+- no timeout, retry, or abort controls in the public API
+- `aiSearch` always disables streaming
+- runtime failures surface as plain `Error` strings rather than typed SDK errors
+
+Full details: [docs/known-issues.md](./docs/known-issues.md)

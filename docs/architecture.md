@@ -20,6 +20,7 @@ This file contains:
 - the fixed `BASE_URL`
 - the `Desearch` class
 - the shared private `handleRequest<T>()` helper
+- response metadata parsing helpers for optional cost/usage visibility
 - all 13 public SDK methods
 
 Those public methods fall into three groups:
@@ -32,6 +33,7 @@ Those public methods fall into three groups:
 This file contains the exported type surface, including:
 - request interfaces
 - response interfaces
+- opt-in response metadata wrapper types
 - literal union types for API options
 - nested X tweet and user models
 - API error payload types
@@ -122,12 +124,42 @@ For POST requests, payloads are sent with:
 The helper checks `response.headers.get('content-type')`.
 
 Behavior:
-- if the content type contains `application/json`, the SDK returns `response.json()`
-- otherwise it returns `response.text()`
+- if the content type contains `application/json`, the SDK parses `response.json()`
+- otherwise it parses `response.text()`
+- by default, the parsed payload is returned directly
+- when a public method is called with `{ includeMetadata: true }`, the parsed payload is returned as `{ data, metadata }`
 
-This is why `webCrawl()` returns `Promise<string>` while most other methods return JSON-shaped data.
+This is why `webCrawl()` returns `Promise<string>` while most other methods return JSON-shaped data by default. The opt-in metadata wrapper also works for `webCrawl()` and JSON array endpoints because metadata is read from response headers instead of being merged into the response body.
 
-### 6. Error normalization
+### 6. Response cost metadata
+
+The SDK can expose per-request cost metadata without changing the default return shape. Each public method has overloads:
+- default call: `Promise<T>`
+- opt-in call with `{ includeMetadata: true }`: `Promise<DesearchResponse<T>>`
+
+The wrapper is:
+
+```ts
+{
+  data: T,
+  metadata: {
+    costCents?: number,
+    usageCount?: number,
+    service?: string,
+    currency?: string,
+  },
+}
+```
+
+Metadata comes from these response headers on the same API response:
+- `X-Desearch-Cost-Cents`
+- `X-Desearch-Usage-Count`
+- `X-Desearch-Service`
+- `X-Desearch-Currency`
+
+Numeric headers are parsed defensively. Missing, empty, or malformed values are omitted from `metadata` instead of throwing or failing an otherwise successful SDK call.
+
+### 7. Error normalization
 
 The helper uses two error paths:
 - HTTP failures become `Error('HTTP <status>: <body>')`

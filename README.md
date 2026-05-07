@@ -171,6 +171,32 @@ const page = await client.webCrawl({
 });
 ```
 
+### Optional response cost metadata
+
+SDK methods return the same raw payload shape by default:
+
+```ts
+const results = await client.webSearch({ query: 'desearch sdk' });
+console.log(results.data);
+```
+
+If you want per-request cost visibility, pass `{ includeMetadata: true }` as the second argument. The SDK reads metadata from the same API response headers; it does not make an extra billing or pricing request.
+
+```ts
+const response = await client.webSearch(
+  { query: 'desearch sdk' },
+  { includeMetadata: true },
+);
+
+console.log(response.data);
+console.log(response.metadata.costCents);
+console.log(response.metadata.usageCount);
+console.log(response.metadata.service);
+console.log(response.metadata.currency);
+```
+
+The metadata wrapper works for JSON object, JSON array, and text endpoints such as `webCrawl()`. Missing or malformed metadata headers are ignored, so successful API calls still resolve normally.
+
 ## Tech stack
 
 - TypeScript `^5.9.3`
@@ -210,6 +236,8 @@ Key design decisions in the current source:
 - GET payloads are serialized through `URLSearchParams`
 - POST payloads are serialized as JSON
 - response parsing switches between JSON and text based on `content-type`
+- default calls return the parsed payload directly, preserving the existing SDK response shape
+- callers can opt into `{ data, metadata }` wrappers with `{ includeMetadata: true }`
 - `webCrawl()` returns text while most other methods return JSON-shaped data
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming

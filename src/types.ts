@@ -2,9 +2,22 @@
 // Enums and Literal Types
 // ============================================================================
 
-export type ToolEnum = 'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'twitter' | 'arxiv';
+export type ToolEnum =
+  | 'web'
+  | 'hackernews'
+  | 'reddit'
+  | 'wikipedia'
+  | 'youtube'
+  | 'twitter'
+  | 'arxiv';
 
-export type WebToolEnum = 'web' | 'hackernews' | 'reddit' | 'wikipedia' | 'youtube' | 'arxiv';
+export type WebToolEnum =
+  | 'web'
+  | 'hackernews'
+  | 'reddit'
+  | 'wikipedia'
+  | 'youtube'
+  | 'arxiv';
 
 export type DateFilterEnum =
   | 'PAST_24_HOURS'
@@ -165,10 +178,63 @@ export interface WebCrawlParams {
 }
 
 // ============================================================================
+// Response Metadata Types
+// ============================================================================
+
+/** Cost and usage metadata parsed from Desearch response headers. */
+export interface DesearchCostMetadata {
+  /** Cost for the request, parsed from X-Desearch-Cost-Cents when present and numeric. */
+  costCents?: number;
+  /** Usage count for the request, parsed from X-Desearch-Usage-Count when present and numeric. */
+  usageCount?: number;
+  /** Service name for the charged request, parsed from X-Desearch-Service when present. */
+  service?: string;
+  /** Billing currency for the request, parsed from X-Desearch-Currency when present. */
+  currency?: string;
+}
+
+/** Wrapper returned when an SDK method is called with { includeMetadata: true }. */
+export interface DesearchResponse<T> {
+  /** The original response payload that default SDK calls return directly. */
+  data: T;
+  /** Optional per-request cost and usage metadata parsed from response headers. */
+  metadata: DesearchCostMetadata;
+}
+
+/** Request options that keep the default raw response payload shape. */
+export interface DesearchDefaultRequestOptions {
+  /** Leave unset or false to receive the raw response payload. */
+  includeMetadata?: false;
+}
+
+/** Request options overload that opts in to the metadata response wrapper. */
+export interface DesearchMetadataRequestOptions {
+  /** Return { data, metadata } instead of the raw response payload. */
+  includeMetadata: true;
+}
+
+/** SDK request options shared by all public methods. */
+export type DesearchRequestOptions =
+  | DesearchDefaultRequestOptions
+  | DesearchMetadataRequestOptions;
+
+/** Optional cost metadata fields that can appear in compatible JSON object bodies. */
+export interface DesearchCostMetadataBodyFields {
+  /** Request cost in cents when included by the API body. */
+  cost_cents?: number | null;
+  /** Request usage count when included by the API body. */
+  usage_count?: number | null;
+  /** Service name when included by the API body. */
+  service?: string | null;
+  /** Billing currency when included by the API body. */
+  currency?: string | null;
+}
+
+// ============================================================================
 // Response Types
 // ============================================================================
 
-export interface ResponseData {
+export interface ResponseData extends DesearchCostMetadataBodyFields {
   /** Search results from Hacker News */
   hacker_news_search?: Record<string, string | number>[] | null;
   /** Search results from Reddit */
@@ -199,7 +265,7 @@ export interface WebSearchResultItem {
   link: string;
 }
 
-export interface WebSearchResponse {
+export interface WebSearchResponse extends DesearchCostMetadataBodyFields {
   /** Youtube search results */
   youtube_search_results: WebSearchResultItem[] | null;
   /** Hacker News search results */
@@ -214,19 +280,19 @@ export interface WebSearchResponse {
   search_results: WebSearchResultItem[] | null;
 }
 
-export interface XLinksSearchResponse {
+export interface XLinksSearchResponse extends DesearchCostMetadataBodyFields {
   /** Miner tweets */
   miner_tweets: TwitterScraperTweet[];
 }
 
-export interface XRetweetersResponse {
+export interface XRetweetersResponse extends DesearchCostMetadataBodyFields {
   /** List of users who retweeted */
   users: TwitterScraperUser[];
   /** Cursor for pagination */
   next_cursor?: string | null;
 }
 
-export interface XUserPostsResponse {
+export interface XUserPostsResponse extends DesearchCostMetadataBodyFields {
   /** User profile information */
   user: TwitterScraperUser;
   /** User's tweets */
@@ -235,7 +301,7 @@ export interface XUserPostsResponse {
   next_cursor?: string | null;
 }
 
-export interface XTrendsResponse {
+export interface XTrendsResponse extends DesearchCostMetadataBodyFields {
   /** List of trending topics */
   trends: XTrendItem[];
   /** The location for which trends were retrieved */
@@ -258,7 +324,8 @@ export interface XTrendsWoeid {
   id: number;
 }
 
-export interface WebSearchResultsResponse {
+export interface WebSearchResultsResponse
+  extends DesearchCostMetadataBodyFields {
   /** Array of web search result items */
   data: WebSearchResultItem[];
 }

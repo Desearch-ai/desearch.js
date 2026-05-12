@@ -189,7 +189,7 @@ const response = await client.webSearch(
 );
 
 console.log(response.data);
-console.log(response.metadata.costCents);
+console.log(response.metadata.costUsd);
 console.log(response.metadata.usageCount);
 console.log(response.metadata.service);
 console.log(response.metadata.currency);

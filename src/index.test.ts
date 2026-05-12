@@ -57,7 +57,7 @@ describe('Desearch response metadata', () => {
     mockResponse({
       body: payload,
       headers: {
-        'X-Desearch-Cost-Cents': '2.5',
+        'X-Desearch-Cost-Usd': '2.5',
         'X-Desearch-Usage-Count': '3',
       },
     });
@@ -84,7 +84,7 @@ describe('Desearch response metadata', () => {
     mockResponse({
       body: payload,
       headers: {
-        'X-Desearch-Cost-Cents': '1',
+        'X-Desearch-Cost-Usd': '1',
         'X-Desearch-Usage-Count': '1',
       },
     });
@@ -100,7 +100,7 @@ describe('Desearch response metadata', () => {
       body: 'plain crawled page',
       contentType: 'text/plain',
       headers: {
-        'X-Desearch-Cost-Cents': '0.25',
+        'X-Desearch-Cost-Usd': '0.25',
         'X-Desearch-Usage-Count': '1',
       },
     });
@@ -124,7 +124,7 @@ describe('Desearch response metadata', () => {
     mockResponse({
       body: payload,
       headers: {
-        'X-Desearch-Cost-Cents': '2.5',
+        'X-Desearch-Cost-Usd': '2.5',
         'X-Desearch-Usage-Count': '3',
         'X-Desearch-Service': 'web-search',
         'X-Desearch-Currency': 'USD',
@@ -137,7 +137,7 @@ describe('Desearch response metadata', () => {
     ).resolves.toEqual({
       data: payload,
       metadata: {
-        costCents: 2.5,
+        costUsd: 2.5,
         usageCount: 3,
         service: 'web-search',
         currency: 'USD',
@@ -161,7 +161,7 @@ describe('Desearch response metadata', () => {
     mockResponse({
       body: payload,
       headers: {
-        'X-Desearch-Cost-Cents': '1.75',
+        'X-Desearch-Cost-Usd': '1.75',
         'X-Desearch-Usage-Count': '2',
         'X-Desearch-Service': 'twitter-urls',
         'X-Desearch-Currency': 'USD',
@@ -177,7 +177,7 @@ describe('Desearch response metadata', () => {
     ).resolves.toEqual({
       data: payload,
       metadata: {
-        costCents: 1.75,
+        costUsd: 1.75,
         usageCount: 2,
         service: 'twitter-urls',
         currency: 'USD',
@@ -190,7 +190,7 @@ describe('Desearch response metadata', () => {
       body: 'plain crawled page',
       contentType: 'text/plain',
       headers: {
-        'X-Desearch-Cost-Cents': 'not-a-number',
+        'X-Desearch-Cost-Usd': 'not-a-number',
         'X-Desearch-Usage-Count': 'NaN',
         'X-Desearch-Service': '',
       },

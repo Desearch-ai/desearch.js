@@ -143,7 +143,7 @@ The wrapper is:
 {
   data: T,
   metadata: {
-    costCents?: number,
+    costUsd?: number,
     usageCount?: number,
     service?: string,
     currency?: string,
@@ -152,7 +152,7 @@ The wrapper is:
 ```
 
 Metadata comes from these response headers on the same API response:
-- `X-Desearch-Cost-Cents`
+- `X-Desearch-Cost-Usd`
 - `X-Desearch-Usage-Count`
 - `X-Desearch-Service`
 - `X-Desearch-Currency`

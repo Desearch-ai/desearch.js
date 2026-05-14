@@ -43,6 +43,7 @@ class Desearch {
   private parseResponseMetadata(headers: {
     get(name: string): string | null;
   }): DesearchCostMetadata {
+    const costUsd = this.parseNumberHeader(headers.get('x-desearch-cost-usd'));
     const costCents = this.parseNumberHeader(
       headers.get('x-desearch-cost-cents')
     );
@@ -53,6 +54,7 @@ class Desearch {
     const currency = this.parseStringHeader(headers.get('x-desearch-currency'));
 
     return {
+      ...(costUsd !== undefined ? { costUsd } : {}),
       ...(costCents !== undefined ? { costCents } : {}),
       ...(usageCount !== undefined ? { usageCount } : {}),
       ...(service !== undefined ? { service } : {}),

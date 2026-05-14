@@ -183,7 +183,9 @@ export interface WebCrawlParams {
 
 /** Cost and usage metadata parsed from Desearch response headers. */
 export interface DesearchCostMetadata {
-  /** Cost for the request, parsed from X-Desearch-Cost-Cents when present and numeric. */
+  /** Cost for the request in USD, parsed from X-Desearch-Cost-Usd when present and numeric. */
+  costUsd?: number;
+  /** @deprecated Use costUsd from X-Desearch-Cost-Usd instead. */
   costCents?: number;
   /** Usage count for the request, parsed from X-Desearch-Usage-Count when present and numeric. */
   usageCount?: number;
@@ -220,7 +222,9 @@ export type DesearchRequestOptions =
 
 /** Optional cost metadata fields that can appear in compatible JSON object bodies. */
 export interface DesearchCostMetadataBodyFields {
-  /** Request cost in cents when included by the API body. */
+  /** Request cost in USD when included by the API body. */
+  cost_usd?: number | null;
+  /** @deprecated Use cost_usd instead. */
   cost_cents?: number | null;
   /** Request usage count when included by the API body. */
   usage_count?: number | null;

@@ -48,6 +48,10 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         run: npm run build
 
+      - name: Upgrade npm for Trusted Publishing
+        if: steps.check.outputs.skip == 'false'
+        run: npm install -g npm@latest
+
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
         run: npm publish --access public --provenance

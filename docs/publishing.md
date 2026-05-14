@@ -28,8 +28,11 @@ Actions workflow; the standard path requires no local credentials.
    - Checks whether that version already exists on npm. If it does, the job
      exits successfully without publishing — this allows non-release commits
      (docs, refactors) to land on `main` without churn.
-   - Installs dependencies (`npm ci`), builds the package (`npm run build`),
-     and publishes with `npm publish --access public --provenance`.
+   - Installs dependencies (`npm ci`), upgrades the npm CLI to a version that
+     supports Trusted Publishing, and builds the package (`npm run build`).
+   - Publishes with `npm publish --access public --provenance`. Authentication
+     happens via OIDC against npm's Trusted Publisher configuration; no
+     long-lived token is involved.
    - Tags the release commit as `vX.Y.Z` and pushes the tag.
 
 4. **Verify the release**:
@@ -49,45 +52,57 @@ Pre-release versions use the `beta` dist-tag (e.g. `1.4.0-beta.0`). Install
 with `npm install desearch-js@beta`. See the `version:beta` and `publish:beta`
 scripts in `package.json` for the local helper commands.
 
-## Required secrets
+## Authentication
 
-The publish workflow runs inside the `prod` GitHub Actions environment and
-requires the following repository configuration:
+The workflow authenticates to npm using
+[Trusted Publishing](https://docs.npmjs.com/trusted-publishers), an OIDC-based
+flow that binds publish rights to a specific GitHub repository and workflow
+file. No long-lived `NPM_TOKEN` is stored anywhere; each publish negotiates a
+short-lived credential at job runtime.
 
-| Secret | Where | Purpose |
-| --- | --- | --- |
-| `NPM_TOKEN` | `prod` environment | Authenticates `npm publish` against the public npm registry. |
+The repository requires no secrets for publishing. The built-in `GITHUB_TOKEN`
+is used to push the release tag, and no additional configuration is required
+for tagging.
 
-The built-in `GITHUB_TOKEN` is used to push the release tag; no additional
-configuration is required for tagging.
+### Trusted Publisher configuration
 
-### Provisioning `NPM_TOKEN`
+The trust relationship is configured once on npm and does not need to be
+re-applied per release. The current configuration for the `desearch-js`
+package is:
 
-1. Sign in to <https://www.npmjs.com> as a user with publish access to the
+| Field | Value |
+| --- | --- |
+| Repository | `Desearch-ai/desearch.js` |
+| Workflow filename | `publish.yml` |
+| Environment | `prod` |
+
+To reconfigure (for example, after renaming the workflow file or moving the
+repository):
+
+1. Sign in to <https://www.npmjs.com> as a user with **owner** access to the
    `desearch-js` package.
-2. Open **Access Tokens** → **Generate New Token**.
-3. Choose **Granular Access Token** (preferred) with the following scope:
-   - Packages and scopes: `desearch-js` — `Read and write`.
-   - Expiration: per organisation policy (recommended: 90–365 days).
-   - If granular tokens are not available for the account, fall back to a
-     **Classic Token** of type **Automation** — this type bypasses 2FA prompts
-     during CI.
-4. In the GitHub repository, open **Settings** → **Environments** → **prod**
-   (create the environment if it does not exist) and add `NPM_TOKEN` as a
-   secret with the value copied from npm.
-5. Optional but recommended: enable **Required reviewers** on the `prod`
-   environment so that the publish job pauses for human approval before
+2. Open the package settings → **Publishing access** → **Trusted Publisher**.
+3. Select **GitHub Actions** and enter the values from the table above.
+4. Under **Publishing access**, leave the default
+   _"Require two-factor authentication and disallow tokens (recommended)"_
+   selected. This permits OIDC-based publishes (used by CI) and 2FA-confirmed
+   manual publishes, and blocks token-based publishes entirely.
+5. Optional but recommended: enable **Required reviewers** on the GitHub
+   `prod` environment so that the publish job pauses for human approval before
    running.
 
-Rotate the token before its expiration and revoke it immediately if the
-repository or its workflows are compromised.
+If the workflow filename, repository name, or environment name in
+[`publish.yml`](../.github/workflows/publish.yml) changes, the Trusted
+Publisher configuration on npm must be updated to match or publishes will
+fail.
 
 ## Manual publishing
 
 The automated workflow is the canonical release path. Manual publishing is
-supported for emergency releases or when GitHub Actions is unavailable; it
-requires npm credentials in the local environment and direct write access to
-the registry.
+supported for emergency releases or when GitHub Actions is unavailable. It
+requires the publisher to be logged in to npm locally
+(`npm login`) and to have publish access to the `desearch-js` package; npm
+will prompt for a 2FA code at publish time.
 
 ```sh
 # From a clean checkout of the commit you intend to publish:
@@ -118,9 +133,18 @@ stable version) which will be published under the `latest` dist-tag.
 
 ## Troubleshooting
 
-**`E403 Forbidden` from npm.** The token in `NPM_TOKEN` does not have publish
-access to the `desearch-js` package, or the token has expired. Regenerate the
-token and update the secret in the `prod` environment.
+**`E403 Forbidden` or `Trusted Publisher` errors from npm.** The OIDC claim
+presented by the workflow does not match the Trusted Publisher configuration
+on npm. Confirm that the values in
+[`publish.yml`](../.github/workflows/publish.yml) — repository, workflow
+filename, and `environment:` — exactly match what is registered under the
+package's Trusted Publisher settings on npmjs.com.
+
+**`Unsupported URL Type "workspace:"` or unrecognised `--provenance` flag.**
+The runner's bundled npm CLI is too old to handle Trusted Publishing. The
+workflow includes an `npm install -g npm@latest` step before publishing; if
+this is removed or fails, publishes will break. Re-run the workflow after
+restoring the upgrade step.
 
 **Workflow ran but no new version on npm.** The version in `package.json` is
 already published. Bump the version in a new PR and merge again.

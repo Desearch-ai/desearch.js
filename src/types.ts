@@ -48,6 +48,10 @@ export interface AiSearchRequest {
   date_filter?: DateFilterEnum | null;
   /** The result type to be used for the search */
   result_type?: ResultTypeEnum | null;
+  /** Restrict Web Search results to these domains. */
+  include_domains?: string[] | null;
+  /** Drop Web Search results from these domains. */
+  exclude_domains?: string[] | null;
   /** The system message to be used for the search */
   system_message?: string | null;
   /** System message for scoring the response */

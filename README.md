@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.3.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.4.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)

@@ -45,8 +45,10 @@ const client = new Desearch(process.env.DESEARCH_API_KEY!);
 
 const result = await client.aiSearch({
   prompt: 'latest Bittensor developments',
-  tools: ['web', 'twitter', 'reddit'],
-  date_filter: 'PAST_24_HOURS',
+  tools: ['web'],
+  start_date: '2025-05-01T00:00:00Z',
+  end_date: '2025-05-08T00:00:00Z',
+  include_domains: ['bbc.com', 'reuters.com'],
   result_type: 'LINKS_WITH_FINAL_SUMMARY',
   count: 10,
 });
@@ -104,7 +106,8 @@ The SDK sends that value as the `Authorization` header on every request.
 ```ts
 const result = await client.aiSearch({
   prompt: 'recent AI chip announcements',
-  tools: ['web', 'hackernews', 'reddit', 'twitter'],
+  tools: ['web'],
+  exclude_domains: ['pinterest.com'],
   result_type: 'LINKS_WITH_FINAL_SUMMARY',
   count: 20,
 });

@@ -160,7 +160,7 @@ The package has test tooling wired into `package.json`, but the current reposito
 Status: ❌ broken for that use case
 
 Evidence:
-All public methods in `src/index.ts` are read, search, or crawl wrappers. There are no account, mutation, ingestion, or write operations exported from the SDK.
+All public methods in `src/index.ts` are read, search, or extraction wrappers. There are no account, mutation, ingestion, or write operations exported from the SDK.
 
 Impact:
 - unsupported operations must be called directly over HTTP outside this package

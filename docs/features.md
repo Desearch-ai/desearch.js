@@ -45,17 +45,19 @@ Status legend:
 | `xPostReplies` | `GET /twitter/replies/post` | ✅ | Post reply lookup works through GET params. |
 | `xTrends` | `GET /twitter/trends` | ✅ | WOEID-based trends lookup. |
 | `webSearch` | `GET /web` | ✅ | SERP-style web search wrapper. |
-| `webCrawl` | `GET /web/crawl` | ✅ | Returns non-JSON text or HTML content based on response type. |
+| `extract` | `GET /web/extract` | ✅ | Canonical Extract API method; returns non-JSON text or HTML content. |
+| `webCrawl` | `GET /web/crawl` | ⚠️ legacy | Deprecated compatibility method for existing clients. |
 
 ## Request and response type coverage
 
-### Search and crawl request types
+### Search and extraction request types
 
 - ✅ `AiSearchRequest`
 - ✅ `AiWebLinksSearchRequest`
 - ✅ `AiXLinksSearchRequest`
 - ✅ `WebSearchParams`
-- ✅ `WebCrawlParams`
+- ✅ `ExtractParams`
+- ⚠️ `WebCrawlParams` is retained as a deprecated alias of `ExtractParams`
 
 ### X request types
 
@@ -98,7 +100,7 @@ Status legend:
 
 ### What is solid today
 
-- typed wrappers for the current public read, search, and crawl endpoints
+- typed wrappers for the current public read, search, and extraction endpoints
 - one predictable request path across all public methods
 - Node-oriented HTTP transport through `undici`
 - CommonJS, ESM, and declaration output for package consumers

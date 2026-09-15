@@ -8,6 +8,7 @@ import type {
   DesearchMetadataRequestOptions,
   DesearchRequestOptions,
   DesearchResponse,
+  ExtractParams,
   WebSearchResponse,
   AiXLinksSearchRequest,
   XLinksSearchResponse,
@@ -597,11 +598,38 @@ class Desearch {
   }
 
   /**
+   * Extract a URL and return its content as plain text or HTML.
+   *
+   * @param params - Object containing the URL and optional extraction controls.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The extracted content as a string, or a metadata wrapper when opted in.
+   */
+  async extract(
+    params: ExtractParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<string>>;
+  async extract(
+    params: ExtractParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<string>;
+  async extract(
+    params: ExtractParams,
+    options: DesearchRequestOptions
+  ): Promise<string | DesearchResponse<string>>;
+  async extract(
+    params: ExtractParams,
+    options?: DesearchRequestOptions
+  ): Promise<string | DesearchResponse<string>> {
+    return this.handleRequest<string>('GET', '/web/extract', params, options);
+  }
+
+  /**
    * Crawl a URL and return its content as plain text or HTML.
    *
    * @param params - Object containing the URL to crawl and optional format (html or text).
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
    * @returns The crawled content as a string, or a metadata wrapper when opted in.
+   * @deprecated Use `extract()` for new integrations. This method keeps calling the legacy `/web/crawl` route for compatibility.
    */
   async webCrawl(
     params: WebCrawlParams,

@@ -20,7 +20,7 @@ What it covers today:
 - AI X-links search
 - X search and lookup endpoints
 - web search
-- web crawl
+- page extraction
 
 What it does not try to be:
 - a browser-first SDK
@@ -97,7 +97,8 @@ The SDK sends that value as the `Authorization` header on every request.
 ### Web methods
 
 - `webSearch(params)` → `GET /web`
-- `webCrawl(params)` → `GET /web/crawl`
+- `extract(params)` → `GET /web/extract`
+- `webCrawl(params)` → `GET /web/crawl` (deprecated compatibility method)
 
 ## Usage examples
 
@@ -165,14 +166,16 @@ const results = await client.webSearch({
 });
 ```
 
-### Web crawl
+### Extract
 
 ```ts
-const page = await client.webCrawl({
+const page = await client.extract({
   url: 'https://desearch.ai',
   format: 'text',
 });
 ```
+
+Existing `webCrawl()` integrations continue to use the deprecated `GET /web/crawl` compatibility route. Use `extract()` for new integrations.
 
 ### Optional response cost metadata
 
@@ -198,7 +201,7 @@ console.log(response.metadata.service);
 console.log(response.metadata.currency);
 ```
 
-The metadata wrapper works for JSON object, JSON array, and text endpoints such as `webCrawl()`. Missing or malformed metadata headers are ignored, so successful API calls still resolve normally.
+The metadata wrapper works for JSON object, JSON array, and text endpoints such as `extract()` and `webCrawl()`. Missing or malformed metadata headers are ignored, so successful API calls still resolve normally.
 
 ## Tech stack
 
@@ -241,7 +244,7 @@ Key design decisions in the current source:
 - response parsing switches between JSON and text based on `content-type`
 - default calls return the parsed payload directly, preserving the existing SDK response shape
 - callers can opt into `{ data, metadata }` wrappers with `{ includeMetadata: true }`
-- `webCrawl()` returns text while most other methods return JSON-shaped data
+- `extract()` and the legacy `webCrawl()` method return text while most other methods return JSON-shaped data
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
 

@@ -174,12 +174,19 @@ export interface WebSearchParams {
   start?: number;
 }
 
-export interface WebCrawlParams {
-  /** Url to crawl */
+export interface ExtractParams {
+  /** Public URL to extract content from */
   url: string;
   /** Format of the content to be returned: 'html' or 'text' */
   format?: 'html' | 'text';
+  /** Render JavaScript before extraction */
+  js?: boolean;
+  /** Optional post-load wait in milliseconds when JavaScript rendering is enabled */
+  wait?: number;
 }
+
+/** @deprecated Use ExtractParams for new integrations. */
+export interface WebCrawlParams extends ExtractParams {}
 
 // ============================================================================
 // Response Metadata Types

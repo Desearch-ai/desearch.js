@@ -129,7 +129,7 @@ Behavior:
 - by default, the parsed payload is returned directly
 - when a public method is called with `{ includeMetadata: true }`, the parsed payload is returned as `{ data, metadata }`
 
-This is why `webCrawl()` returns `Promise<string>` while most other methods return JSON-shaped data by default. The opt-in metadata wrapper also works for `webCrawl()` and JSON array endpoints because metadata is read from response headers instead of being merged into the response body.
+This is why `extract()` and the legacy `webCrawl()` method return `Promise<string>` while most other methods return JSON-shaped data by default. The opt-in metadata wrapper also works for these text endpoints and JSON array endpoints because metadata is read from response headers instead of being merged into the response body.
 
 ### 6. Response cost metadata
 
@@ -210,11 +210,12 @@ The X section also drives most of the type complexity in `src/types.ts`, because
 
 These use GET requests:
 - `webSearch`
-- `webCrawl`
+- `extract`
+- `webCrawl` (deprecated compatibility method)
 
 The main difference is the response shape:
 - `webSearch` expects JSON
-- `webCrawl` can return text or HTML, and the SDK treats non-JSON responses as text
+- `extract` and `webCrawl` can return text or HTML, and the SDK treats non-JSON responses as text
 
 ## Type-system design
 
@@ -236,7 +237,8 @@ Why:
 Examples:
 - `AiSearchRequest`
 - `XSearchParams`
-- `WebCrawlParams`
+- `ExtractParams`
+- `WebCrawlParams` (deprecated compatibility alias)
 
 Why:
 - the SDK is mostly a typed transport wrapper, so request contracts are a big part of the package value

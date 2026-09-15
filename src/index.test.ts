@@ -111,6 +111,31 @@ describe('Desearch response metadata', () => {
     ).resolves.toBe('plain crawled page');
   });
 
+  it('uses the canonical Extract route while preserving the legacy webCrawl route', async () => {
+    mockResponse({ body: 'canonical content', contentType: 'text/plain' });
+    mockResponse({ body: 'legacy content', contentType: 'text/plain' });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.extract({
+        url: 'https://desearch.ai',
+        format: 'text',
+        js: true,
+        wait: 250,
+      })
+    ).resolves.toBe('canonical content');
+    await expect(
+      client.webCrawl({ url: 'https://desearch.ai', format: 'text' })
+    ).resolves.toBe('legacy content');
+
+    expect(mockedFetch.mock.calls[0]?.[0]).toBe(
+      'https://api.desearch.ai/web/extract?url=https%3A%2F%2Fdesearch.ai&format=text&js=true&wait=250'
+    );
+    expect(mockedFetch.mock.calls[1]?.[0]).toBe(
+      'https://api.desearch.ai/web/crawl?url=https%3A%2F%2Fdesearch.ai&format=text'
+    );
+  });
+
   it('returns data and parsed cost metadata when explicitly opted in', async () => {
     const payload = {
       data: [

@@ -50,7 +50,9 @@ jobs:
 
       - name: Upgrade npm for Trusted Publishing
         if: steps.check.outputs.skip == 'false'
-        run: npm install -g npm@latest
+        # npm 12 requires Node 22.22.2+, while this project intentionally runs
+        # Node 20. Pin a Trusted Publishing-capable npm 11 release instead.
+        run: npm install -g npm@11.19.1
 
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'

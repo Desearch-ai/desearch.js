@@ -1,6 +1,6 @@
 {
   "name": "desearch-js",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Desearch SDK for the Node.js",
   "publishConfig": {
     "access": "public"

@@ -36,6 +36,8 @@ What it does not try to be:
 npm install desearch-js
 ```
 
+Requires Node.js ≥ 20.18.1
+
 ### ESM usage
 
 `Desearch` is both the default export and a named export.

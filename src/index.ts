@@ -32,7 +32,7 @@ import type {
 
 const BASE_URL = 'https://api.desearch.ai';
 
-class Desearch {
+export class Desearch {
   private baseURL: string;
   private apiKey: string;
 

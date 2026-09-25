@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  package-smoke:
+    name: Pack smoke (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack
+        run: npm pack
+
+      - name: Install tarball and smoke CJS and ESM exports
+        run: |
+          set -euo pipefail
+          TARBALL="$(pwd)/$(ls desearch-js-*.tgz)"
+          WORK="$(mktemp -d)"
+          cd "$WORK"
+          npm init -y >/dev/null
+          npm install "$TARBALL"
+
+          node <<'EOF'
+          const assert = require('assert');
+          const undici = require('undici/package.json');
+          const major = Number(String(undici.version).split('.')[0]);
+          assert.ok(major === 6 || major === 7, `expected undici 6.x or 7.x, got ${undici.version}`);
+
+          const loaded = require('desearch-js');
+          assert.strictEqual(typeof loaded.default, 'function', 'CJS default export is not a constructor');
+          assert.strictEqual(typeof loaded.Desearch, 'function', 'CJS named export Desearch is not a constructor');
+          assert.strictEqual(loaded.default, loaded.Desearch, 'CJS default and named Desearch differ');
+          assert.ok(new loaded.Desearch('smoke-key'));
+          assert.ok(new loaded.default('smoke-key'));
+          console.log(`cjs ok (undici@${undici.version})`);
+          EOF
+
+          node --input-type=module <<'EOF'
+          import assert from 'node:assert/strict';
+          import DesearchDefault, { Desearch } from 'desearch-js';
+
+          assert.equal(typeof DesearchDefault, 'function', 'ESM default export is not a constructor');
+          assert.equal(typeof Desearch, 'function', 'ESM named export Desearch is not a constructor');
+          assert.equal(DesearchDefault, Desearch, 'ESM default and named Desearch differ');
+          assert.ok(new Desearch('smoke-key'));
+          assert.ok(new DesearchDefault('smoke-key'));
+          console.log('esm ok');
+          EOF

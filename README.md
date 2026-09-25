@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.5.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.5.1`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -36,10 +36,15 @@ What it does not try to be:
 npm install desearch-js
 ```
 
+Requires Node.js ≥ 20.18.1
+
 ### ESM usage
+
+`Desearch` is both the default export and a named export.
 
 ```ts
 import Desearch from 'desearch-js';
+// or: import { Desearch } from 'desearch-js';
 
 const client = new Desearch(process.env.DESEARCH_API_KEY!);
 
@@ -59,7 +64,8 @@ console.log(result);
 ### CommonJS usage
 
 ```js
-const Desearch = require('desearch-js').default;
+const { Desearch } = require('desearch-js');
+// or: const Desearch = require('desearch-js').default;
 
 const client = new Desearch(process.env.DESEARCH_API_KEY);
 ```
@@ -206,7 +212,7 @@ The metadata wrapper works for JSON object, JSON array, and text endpoints such 
 ## Tech stack
 
 - TypeScript `^5.9.3`
-- `undici` `>=5` for HTTP transport
+- `undici` `^6.28.1 || ^7.29.1` for HTTP transport
 - `dotenv` `^17.3.1` as a runtime dependency in `package.json`
 - `tsup` `^8.5.1` for bundling
 - `vitest` `^4.0.18` for tests

@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetch } from 'undici';
-import Desearch from './index';
+import Desearch, { Desearch as DesearchNamed } from './index';
 
 vi.mock('undici', () => ({
   fetch: vi.fn(),
@@ -38,6 +39,22 @@ function mockResponse({
     text: vi.fn().mockResolvedValue(String(body)),
   } as any);
 }
+
+describe('public exports', () => {
+  it('exposes Desearch as both the default and a named export', () => {
+    expect(DesearchNamed).toBe(Desearch);
+    expect(typeof Desearch).toBe('function');
+    expect(new DesearchNamed('test-key')).toBeInstanceOf(Desearch);
+  });
+
+  it('bounds undici to the 6.x and 7.x lines that load on Node 20', () => {
+    const pkg = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+    );
+    expect(pkg.dependencies.undici).toBe('^6.28.1 || ^7.29.1');
+    expect(pkg.engines.node).toBe('>=20.18.1');
+  });
+});
 
 describe('Desearch response metadata', () => {
   beforeEach(() => {

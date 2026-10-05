@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetch } from 'undici';
 import Desearch, { Desearch as DesearchNamed } from './index';
+import type { TwitterScraperCard, TwitterScraperTweet } from './index';
 
 vi.mock('undici', () => ({
   fetch: vi.fn(),
@@ -110,6 +111,39 @@ describe('Desearch response metadata', () => {
     await expect(
       client.xPostsByUrls({ urls: ['https://x.com/desearch/status/1'] })
     ).resolves.toEqual(payload);
+  });
+
+  it('returns the tweet card', async () => {
+    const card: TwitterScraperCard = {
+      type: 'summary_large_image',
+      url: 'https://t.co/hVHgyxtOZ9',
+      title: 'Starship | Starlink Group 31-1 (Starship Flight 14)',
+      domain: 'www.missionstatus.com',
+      image:
+        'https://pbs.twimg.com/card_img/2104931127370690560/nssO7aWi?format=jpg&name=800x419',
+    };
+    const payload: TwitterScraperTweet[] = [
+      {
+        id: '2101254595058024720',
+        text: 'Starship Flight 14',
+        reply_count: 37,
+        retweet_count: 1,
+        like_count: 13,
+        quote_count: 1,
+        bookmark_count: 1,
+        created_at: 'Sat Sep 19 10:18:29 +0000 2026',
+        card,
+      },
+    ];
+    mockResponse({ body: payload });
+
+    const client = new Desearch('test-key');
+    const tweets = (await client.xPostsByUrls({
+      urls: ['https://x.com/ARealRocketMan/status/2101254595058024720'],
+    })) as TwitterScraperTweet[];
+
+    expect(tweets[0].card?.title).toBe(card.title);
+    expect(tweets[0].card?.domain).toBe('www.missionstatus.com');
   });
 
   it('returns the raw text payload by default even when cost headers are present', async () => {

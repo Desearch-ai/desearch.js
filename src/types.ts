@@ -402,6 +402,31 @@ export interface TwitterScraperTweet {
   extended_entities?: TwitterScraperExtendedEntities | null;
   /** Retweeted tweet object. Available for user posts endpoint only. */
   retweet?: TwitterScraperTweet | null;
+  /** Link preview, video player or live broadcast shown under the tweet. Null when the tweet has none. */
+  card?: TwitterScraperCard | null;
+}
+
+export interface TwitterScraperCard {
+  /** Card kind: summary, summary_large_image, player or broadcast */
+  type: string;
+  /** Short link the card points to. The full URL is in the tweet's entities.urls. */
+  url?: string | null;
+  /** Title of the linked page, video or broadcast */
+  title?: string | null;
+  /** Description of the linked page */
+  description?: string | null;
+  /** Domain of the linked page */
+  domain?: string | null;
+  /** Preview image URL */
+  image?: string | null;
+  /** Alt text of the preview image */
+  image_alt?: string | null;
+  /** Embeddable video URL. Player cards only. */
+  player_url?: string | null;
+  /** Live broadcast URL. Broadcast cards only. */
+  broadcast_url?: string | null;
+  /** Broadcast state, for example ENDED. Broadcast cards only. */
+  state?: string | null;
 }
 
 export interface TwitterScraperUser {

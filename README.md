@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.5.1`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.6.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -21,12 +21,13 @@ What it covers today:
 - X search and lookup endpoints
 - web search
 - page extraction
+- People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 
 What it does not try to be:
 - a browser-first SDK
 - a configurable transport layer
-- a write or mutation client
-- a framework with retries, pagination helpers, or runtime validation
+- a general write or mutation client (People Search tasks are the only things it creates or changes)
+- a framework with retries or runtime validation (People Search adds a small polling helper and a results-page iterator)
 
 ## Quick Start
 
@@ -105,6 +106,26 @@ The SDK sends that value as the `Authorization` header on every request.
 - `webSearch(params)` → `GET /web`
 - `extract(params)` → `GET /web/extract`
 - `webCrawl(params)` → `GET /web/crawl` (deprecated compatibility method)
+
+### People Search methods
+
+- `xProfileSearch(payload, options?)` → `POST /desearch/people/search/x` (billed)
+- `youtubeCreatorSearch(payload, options?)` → `POST /desearch/people/search/youtube` (billed)
+- `linkedinProfileSearch(payload, options?)` → `POST /desearch/people/search/linkedin` (billed)
+- `tiktokCreatorSearch(payload, options?)` → `POST /desearch/people/search/tiktok` (billed)
+- `listPeopleTasks(params?)` → `GET /desearch/people/tasks`
+- `getPeopleTask(params)` → `GET /desearch/people/tasks/{task_id}`
+- `getPeopleResults(params)` → `GET /desearch/people/tasks/{task_id}/results`
+- `pausePeopleTask(params)` → `POST /desearch/people/tasks/{task_id}/pause`
+- `resumePeopleTask(params)` → `POST /desearch/people/tasks/{task_id}/resume`
+- `cancelPeopleTask(params)` → `POST /desearch/people/tasks/{task_id}/cancel`
+- `exportPeopleResults(params)` → `GET /desearch/people/tasks/{task_id}/export`
+- `listPeopleProfiles(params)` → `GET /desearch/people/profiles`
+- `exportPeopleProfiles(params)` → `GET /desearch/people/profiles/export`
+- `waitForPeopleTask(params, options?)` polls `getPeopleTask` until the task ends
+- `iterPeopleResultPages(params)` is an async iterator over `getPeopleResults` pages
+
+See [People Search](#people-search) for the full flow.
 
 ## Usage examples
 
@@ -209,6 +230,140 @@ console.log(response.metadata.currency);
 
 The metadata wrapper works for JSON object, JSON array, and text endpoints such as `extract()` and `webCrawl()`. Missing or malformed metadata headers are ignored, so successful API calls still resolve normally.
 
+## People Search
+
+People Search finds people by what they post and how they describe themselves: X profiles, YouTube creators, LinkedIn members and TikTok creators. Each search runs as a background task. The search call returns a queued task at once. You poll the task until it ends, read the results page by page and export them as CSV or JSON Lines.
+
+### End-to-end example
+
+```ts
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import Desearch from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
+
+// 1. Start the search. This is the only billed call.
+const task = await client.tiktokCreatorSearch(
+  {
+    query: 'Skincare creators who review sunscreen',
+    count: 25,
+    filters: { min_followers: 10000, require_contact: true },
+  },
+  { idempotencyKey: randomUUID() },
+);
+console.log(task.task_id, task.status, task.reserved_cost_usd);
+
+// 2. Wait until it ends. Polling is free.
+const done = await client.waitForPeopleTask(task, {
+  intervalMs: 5000,
+  timeoutMs: 10 * 60 * 1000,
+  onProgress: (t) => console.log(t.status, `${t.result_count}/${t.count}`),
+});
+console.log(done.status, done.final_cost_usd);
+
+// 3. Read every result page.
+for await (const page of client.iterPeopleResultPages({
+  task_id: task.task_id,
+  limit: 100,
+})) {
+  for (const person of page.results) {
+    console.log(person.handle, person.score?.value, person.metrics.followers);
+  }
+}
+
+// 4. Export only the creators with a public email, as CSV.
+const csv = await client.exportPeopleResults({
+  task_id: task.task_id,
+  format: 'csv',
+  has: ['email'],
+});
+writeFileSync(`people-${task.task_id}.csv`, csv);
+```
+
+`xProfileSearch`, `youtubeCreatorSearch` and `linkedinProfileSearch` work the same way. Each request takes `query`, `count` (5-200, default 25), `min_score`, `exclude`, and that platform's `filters`. The types `XProfileSearchFilters`, `YouTubeCreatorSearchFilters`, `LinkedInProfileSearchFilters` and `TikTokCreatorSearchFilters` list the filters for each platform.
+
+### Pricing
+
+People Search is billed per profile delivered. Each search call reserves `count` times the route's unit price. When the task ends, it settles to the qualified profiles it delivered, and the rest of the reservation is returned:
+
+- A minimum per search applies when it finds anyone.
+- A search that finds nobody costs $0.
+- `reserved_cost_usd` and `final_cost_usd` on the task show the reserved and final amounts.
+- All task, results, export and profiles calls are free.
+
+Current prices are at <https://console.desearch.ai/pricing>.
+
+### Idempotency
+
+Pass `{ idempotencyKey }` as the second argument of a search method. The SDK sends it as the `Idempotency-Key` header. If you retry a create call with the same key, the API returns the original task and does not charge again. Search methods also accept `{ includeMetadata: true }`, which returns the reservation's cost headers as `metadata`.
+
+### Waiting and paging
+
+- `waitForPeopleTask(params, options?)` polls until the status is `completed`, `partial`, `failed`, `cancelled` or `expired`. It then returns the task. If the task has not ended within `timeoutMs`, it throws an `Error`. A `paused` task has not ended. `params` only needs `task_id`, so you can pass the task object itself.
+- `iterPeopleResultPages(params)` follows `next_cursor` until `has_more` is false. Results arrive while a search is still running. To read only new results later, keep the last page's `next_cursor` and pass it back as `cursor`.
+
+### Result filters
+
+`exportPeopleResults`, `listPeopleProfiles` and `exportPeopleProfiles` accept the same filters. The SDK sends them as query parameters and joins `has` with commas:
+
+| Filter | Meaning |
+| --- | --- |
+| `has` | Channels every person must have: `email`, `website`, `x`, `linkedin`, `instagram`, `youtube`, `tiktok` |
+| `min_audience` / `max_audience` | Followers (subscribers on YouTube) |
+| `min_score` | Minimum fit score, 0-100 |
+| `location` | Case-insensitive text in the location |
+| `verified` | Only verified accounts (X, TikTok) |
+
+### Pause, resume and cancel
+
+```ts
+import { PeopleTaskConflictError } from 'desearch-js';
+
+await client.pausePeopleTask({ task_id: task.task_id });
+await client.resumePeopleTask({ task_id: task.task_id });
+
+try {
+  await client.cancelPeopleTask({ task_id: task.task_id });
+} catch (error) {
+  if (error instanceof PeopleTaskConflictError) {
+    // HTTP 409: the task's status does not allow this action.
+    console.log(error.detail, error.task.status);
+  } else {
+    throw error;
+  }
+}
+```
+
+Cancelling bills only the profiles delivered so far. A search cancelled before it starts costs nothing.
+
+### Tasks and the profiles library
+
+```ts
+const { tasks, next_cursor } = await client.listPeopleTasks({
+  platform: 'tiktok',
+  status: ['running', 'paused'],
+  limit: 20,
+});
+
+const library = await client.listPeopleProfiles({
+  platform: 'tiktok',
+  q: 'sunscreen',
+  sort: 'audience',
+  has: ['email'],
+  min_audience: 10000,
+});
+console.log(library.total, library.profiles[0]?.found_by.query);
+
+const allCreators = await client.exportPeopleProfiles({
+  platform: 'tiktok',
+  format: 'jsonl',
+  has: ['email'],
+});
+```
+
+The profiles library lists everyone your searches on one platform found, one entry per person, together with the search that found them (`found_by`). Results and profiles stay available for 30 days after a search ends.
+
 ## Tech stack
 
 - TypeScript `^5.9.3`
@@ -253,6 +408,7 @@ Key design decisions in the current source:
 - `extract()` and the legacy `webCrawl()` method return text while most other methods return JSON-shaped data
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
+- People Search methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
 
 See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.
 
@@ -269,6 +425,8 @@ Non-HTTP failures are wrapped as:
 ```txt
 Unexpected Error: <message>
 ```
+
+The one exception is `PeopleTaskConflictError`, which pause, resume and cancel throw on HTTP 409. Its message keeps the `HTTP 409: <response body>` format, and it adds `status`, `detail` and the current `task`.
 
 Example:
 
@@ -291,7 +449,7 @@ try {
 
 Current limitations include:
 - no configurable base URL
-- no timeout, retry, or abort controls in the public API
+- no timeout, retry, or abort controls for individual requests (`waitForPeopleTask` has a polling timeout but cannot be aborted)
 - `aiSearch` always disables streaming
 - runtime failures surface as plain `Error` strings rather than typed SDK errors
 

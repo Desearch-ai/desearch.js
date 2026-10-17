@@ -663,6 +663,471 @@ export interface TwitterScraperUserProfessionalCategory {
 }
 
 // ============================================================================
+// People Search Types
+// ============================================================================
+
+/** Platform a People Search runs on. */
+export type PeoplePlatform = 'x' | 'youtube' | 'linkedin' | 'tiktok';
+
+/** Search type stored on a People Search task. */
+export type PeopleSearchType =
+  | 'x_profile_search'
+  | 'youtube_creator_search'
+  | 'linkedin_profile_search'
+  | 'tiktok_creator_search';
+
+/** Lifecycle status of a People Search task. */
+export type PeopleTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'pausing'
+  | 'paused'
+  | 'cancelling'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
+
+/** Statuses after which a People Search task no longer changes. */
+export type PeopleTaskEndStatus =
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
+
+/** What a running People Search task is doing. */
+export type PeopleTaskStage =
+  | 'planning'
+  | 'searching'
+  | 'processing'
+  | 'finalizing';
+
+/** Channels the `has` result filter accepts. */
+export type PeopleFilterChannel =
+  | 'email'
+  | 'website'
+  | 'x'
+  | 'linkedin'
+  | 'instagram'
+  | 'youtube'
+  | 'tiktok';
+
+/** Sort order for the profiles library. */
+export type PeopleProfileSort = 'score' | 'recent' | 'audience';
+
+/** File format of a People Search export. */
+export type PeopleExportFormat = 'csv' | 'jsonl';
+
+/** Fields shared by every People Search request body. */
+export interface PeopleSearchRequestBase {
+  /** Who you are looking for, in plain language (3-1000 characters). */
+  query: string;
+  /** How many qualified profiles to find (5-200, default 25). This many are reserved at the route price; only delivered profiles are billed. */
+  count?: number;
+  /** Only return profiles with at least this fit score (0-100). */
+  min_score?: number | null;
+  /** Handles to leave out, for example people you already contacted (up to 1000). */
+  exclude?: string[] | null;
+}
+
+export interface XProfileSearchFilters {
+  /** Minimum follower count. */
+  min_followers?: number | null;
+  /** Maximum follower count. */
+  max_followers?: number | null;
+  /** Only verified or X Premium accounts. */
+  verified_only?: boolean;
+  /** Countries to prefer, e.g. ['US', 'GB']. */
+  countries?: string[] | null;
+  /** Words that should appear in posts or bios. */
+  keywords?: string[] | null;
+  /** Leave out profiles that mention these words. */
+  exclude_keywords?: string[] | null;
+}
+
+export interface YouTubeCreatorSearchFilters {
+  /** Minimum subscriber count. */
+  min_subscribers?: number | null;
+  /** Maximum subscriber count. */
+  max_subscribers?: number | null;
+  /** Channel countries to prefer, e.g. ['US']. */
+  countries?: string[] | null;
+  /** Only creators with a public email or contact link. */
+  require_contact?: boolean;
+  /** Words that should appear in videos or channel descriptions. */
+  keywords?: string[] | null;
+  /** Leave out creators that mention these words. */
+  exclude_keywords?: string[] | null;
+}
+
+export interface LinkedInProfileSearchFilters {
+  /** Minimum LinkedIn follower count. */
+  min_followers?: number | null;
+  /** Maximum LinkedIn follower count. */
+  max_followers?: number | null;
+  /** Countries to prefer, e.g. ['US', 'United Kingdom']. */
+  countries?: string[] | null;
+  /** Words that should appear in posts, headlines or about sections. */
+  keywords?: string[] | null;
+  /** Leave out profiles that mention these words. */
+  exclude_keywords?: string[] | null;
+}
+
+export interface TikTokCreatorSearchFilters {
+  /** Minimum TikTok follower count. */
+  min_followers?: number | null;
+  /** Maximum TikTok follower count. */
+  max_followers?: number | null;
+  /** Only creators with a public email in their bio. */
+  require_contact?: boolean;
+  /** Words that should appear in videos or bios. */
+  keywords?: string[] | null;
+  /** Leave out creators that mention these words. */
+  exclude_keywords?: string[] | null;
+}
+
+export interface XProfileSearchRequest extends PeopleSearchRequestBase {
+  /** X-specific search filters */
+  filters?: XProfileSearchFilters | null;
+}
+
+export interface YouTubeCreatorSearchRequest extends PeopleSearchRequestBase {
+  /** YouTube-specific search filters */
+  filters?: YouTubeCreatorSearchFilters | null;
+}
+
+export interface LinkedInProfileSearchRequest extends PeopleSearchRequestBase {
+  /** LinkedIn-specific search filters */
+  filters?: LinkedInProfileSearchFilters | null;
+}
+
+export interface TikTokCreatorSearchRequest extends PeopleSearchRequestBase {
+  /** TikTok-specific search filters */
+  filters?: TikTokCreatorSearchFilters | null;
+}
+
+/** Options for the billed People Search create calls. */
+export interface PeopleSearchOptions {
+  /** Sent as the `Idempotency-Key` header. Retrying with the same key returns the original task and is not charged again. */
+  idempotencyKey?: string;
+}
+
+/**
+ * Result filters shared by `exportPeopleResults`, `listPeopleProfiles` and `exportPeopleProfiles`.
+ * They are sent as query parameters; `has` is joined with commas.
+ */
+export interface PeopleResultFilters {
+  /** Channels every person must have, e.g. ['email', 'instagram']. */
+  has?: PeopleFilterChannel[] | null;
+  /** Minimum followers (subscribers on YouTube). */
+  min_audience?: number | null;
+  /** Maximum followers (subscribers on YouTube). */
+  max_audience?: number | null;
+  /** Minimum fit score (0-100). */
+  min_score?: number | null;
+  /** Case-insensitive text in the location, e.g. 'united states'. */
+  location?: string | null;
+  /** Only verified accounts (X, TikTok). */
+  verified?: boolean | null;
+}
+
+/** Identifies one People Search task. */
+export interface PeopleTaskParams {
+  /** The task ID returned when the search was created */
+  task_id: string;
+}
+
+export interface ListPeopleTasksParams {
+  /** Only tasks on this platform */
+  platform?: PeoplePlatform | null;
+  /** Only tasks in these statuses; an array is sent comma-separated */
+  status?: PeopleTaskStatus | PeopleTaskStatus[] | null;
+  /** Page size (1-100, default 20) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+}
+
+export interface GetPeopleResultsParams extends PeopleTaskParams {
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+  /** Page size (1-500, default 100) */
+  limit?: number | null;
+}
+
+export interface ExportPeopleResultsParams
+  extends PeopleTaskParams,
+    PeopleResultFilters {
+  /** File format (default csv) */
+  format?: PeopleExportFormat;
+}
+
+export interface ListPeopleProfilesParams extends PeopleResultFilters {
+  /** Platform whose people to list */
+  platform: PeoplePlatform;
+  /** Text in the name, handle, bio or location */
+  q?: string | null;
+  /** Sort order (default score) */
+  sort?: PeopleProfileSort | null;
+  /** Page size (1-200, default 50) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+}
+
+export interface ExportPeopleProfilesParams extends PeopleResultFilters {
+  /** Platform whose people to export */
+  platform: PeoplePlatform;
+  /** File format (default csv) */
+  format?: PeopleExportFormat;
+  /** Text in the name, handle, bio or location */
+  q?: string | null;
+  /** Sort order (default score) */
+  sort?: PeopleProfileSort | null;
+}
+
+/** Options for `waitForPeopleTask`. */
+export interface WaitForPeopleTaskOptions {
+  /** Milliseconds between polls. Default 5000. */
+  intervalMs?: number;
+  /** Milliseconds to wait before giving up with an error. Default 600000 (10 minutes). */
+  timeoutMs?: number;
+  /** Called with the task after every poll, including the last one. */
+  onProgress?: (task: PeopleTask) => void;
+}
+
+export interface PeopleTaskLinks {
+  /** API path of the task */
+  self: string;
+  /** API path of the task's results */
+  results: string;
+  /** API path of the task's export */
+  export: string;
+}
+
+export interface PeopleTaskCreatedBy {
+  /** User who created the task */
+  user_id?: string | null;
+  /** API key that created the task */
+  api_key_id?: string | null;
+  /** How the task was created, e.g. api_key or console */
+  via?: string | null;
+}
+
+/** A People Search task. Poll it until `status` is completed, partial, failed or cancelled. */
+export interface PeopleTask {
+  /** Task ID (UUID) */
+  task_id: string;
+  /** Search type */
+  search_type: PeopleSearchType;
+  /** Platform searched */
+  platform: PeoplePlatform;
+  /** Current status */
+  status: PeopleTaskStatus;
+  /** Current stage while the task runs */
+  stage?: PeopleTaskStage | null;
+  /** The search query */
+  query: string;
+  /** How many profiles were requested */
+  count: number;
+  /** How many qualified profiles were found so far */
+  result_count: number;
+  /** How the search was understood: criteria and the queries it ran */
+  interpreted?: Record<string, unknown> | null;
+  /** Progress counters */
+  progress: Record<string, unknown>;
+  /** Errors the task ran into */
+  errors: unknown[];
+  /** Amount reserved when the task was created, in USD */
+  reserved_cost_usd: number;
+  /** Final cost once the task has ended, in USD. The rest of the reservation is returned. */
+  final_cost_usd?: number | null;
+  /** Amount returned from the reservation, in USD */
+  refunded_usd?: number | null;
+  /** Who created the task */
+  created_by?: PeopleTaskCreatedBy | null;
+  /** Creation timestamp (ISO 8601) */
+  created_at: string;
+  /** Start timestamp (ISO 8601) */
+  started_at?: string | null;
+  /** Pause timestamp (ISO 8601) */
+  paused_at?: string | null;
+  /** End timestamp (ISO 8601) */
+  finished_at?: string | null;
+  /** When the results expire (ISO 8601), 30 days after the task ends */
+  results_expire_at?: string | null;
+  /** API paths for this task */
+  links?: PeopleTaskLinks | null;
+}
+
+/** The task returned by a People Search create call, with what the call reserved. */
+export interface PeopleSearchTask
+  extends PeopleTask,
+    DesearchCostMetadataBodyFields {}
+
+export interface PeopleTaskList {
+  /** Tasks, newest first */
+  tasks: PeopleTask[];
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+/** 409 body of pause, resume and cancel: why the action was refused, and the task as it is now. */
+export interface PeopleTaskConflictResponse {
+  /** Why the action is not allowed */
+  detail: string;
+  /** The task in its current state */
+  task: PeopleTask;
+}
+
+export interface PeopleEvidence {
+  /** Evidence type, e.g. post or video */
+  type: string;
+  /** URL of the post or video */
+  url?: string | null;
+  /** Text of the post or video description */
+  text?: string | null;
+  /** Video title */
+  title?: string | null;
+  /** Publish timestamp */
+  published_at?: string | null;
+  /** Engagement metrics such as views, likes, replies */
+  metrics?: Record<string, unknown> | null;
+}
+
+export interface PeopleScore {
+  /** Fit score (0-100) */
+  value?: number | null;
+  /** Whether the person qualified */
+  qualified?: boolean | null;
+  /** One line on why this person matched */
+  summary?: string | null;
+  /** Signals from the request that matched */
+  matched_signals: string[];
+  /** Why who they are fits the request */
+  profile_fit: string[];
+  /** What they post or do that matches the request */
+  buying_triggers: string[];
+  /** The posts, videos or profile text behind the match */
+  evidence: string[];
+  /** profile_fit, buying_triggers and evidence combined */
+  reasons: string[];
+  /** Reasons the match may be weaker */
+  concerns: string[];
+}
+
+export interface PersonMetrics {
+  /** Followers (X, LinkedIn, TikTok) */
+  followers?: number | null;
+  /** Accounts followed (X) */
+  following?: number | null;
+  /** Subscribers (YouTube) */
+  subscribers?: number | null;
+  /** Videos (YouTube, TikTok) */
+  videos?: number | null;
+  /** Total views (YouTube) */
+  views?: number | null;
+  /** Total likes (TikTok) */
+  likes?: number | null;
+  /** Connections (LinkedIn) */
+  connections?: number | null;
+  [key: string]: unknown;
+}
+
+export interface PersonLink {
+  /** Link type: website, x, linkedin, instagram, youtube, tiktok, ... */
+  type: string;
+  /** Link URL */
+  url: string;
+  /** Link title */
+  title?: string | null;
+  /** Where the link was found */
+  source?: string | null;
+}
+
+export interface PersonContact {
+  /** Contact type, e.g. email */
+  type: string;
+  /** Contact value, e.g. the email address */
+  value: string;
+  /** Where the contact was found */
+  source_url?: string | null;
+}
+
+/** One qualified profile (X, LinkedIn) or creator (YouTube, TikTok). */
+export interface Person {
+  /** Stable person ID, e.g. x:handle */
+  id: string;
+  /** Platform of the profile */
+  platform: PeoplePlatform;
+  /** Handle on the platform */
+  handle: string;
+  /** Profile URL */
+  url?: string | null;
+  /** Display name */
+  name?: string | null;
+  /** Avatar URL */
+  avatar_url?: string | null;
+  /** Bio or about text */
+  bio?: string | null;
+  /** Location */
+  location?: string | null;
+  /** Audience and activity numbers */
+  metrics: PersonMetrics;
+  /** Platform-specific details such as verified, headline, company, region */
+  attributes?: Record<string, unknown> | null;
+  /** Links found on the profile */
+  links: PersonLink[];
+  /** Public contacts such as emails */
+  contacts: PersonContact[];
+  /** The posts or videos behind the match */
+  evidence: PeopleEvidence[];
+  /** Fit score and reasons */
+  score?: PeopleScore | null;
+}
+
+export interface PeopleResultsPage {
+  /** Task ID */
+  task_id: string;
+  /** Task status when the page was read */
+  status: PeopleTaskStatus;
+  /** Profiles on this page, in the order they were found */
+  results: Person[];
+  /** Pass as `cursor` on the next call. When `has_more` is false, keep it and call again later to get only new results. */
+  next_cursor: string;
+  /** True when more results are already available after this page */
+  has_more: boolean;
+}
+
+export interface PersonFoundBy {
+  /** Task that found the person (its best-scoring result) */
+  task_id: string;
+  /** Query of that task */
+  query: string;
+  /** When the person was found */
+  found_at: string;
+  /** How many of your searches found this person */
+  times_found: number;
+}
+
+/** A person from your searches, with the search that found them. */
+export interface PeopleProfile extends Person {
+  /** The search behind this entry */
+  found_by: PersonFoundBy;
+}
+
+export interface PeopleProfilesPage {
+  /** People on this page */
+  profiles: PeopleProfile[];
+  /** People matching the filter across all your searches */
+  total: number;
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+// ============================================================================
 // Error Response Types
 // ============================================================================
 

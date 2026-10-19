@@ -730,6 +730,12 @@ export interface PeopleSearchRequestBase {
   min_score?: number | null;
   /** Handles to leave out, for example people you already contacted (up to 1000). */
   exclude?: string[] | null;
+  /**
+   * Your own labels for this search, e.g. the workspace or campaign it belongs to.
+   * At most 10 keys; keys are 1-40 characters of a-z, 0-9, '_', '.' or '-'; values are strings of at most 200 characters.
+   * Returned as `metadata` on the task and usable as a `listPeopleTasks` filter. Never used by the search itself.
+   */
+  metadata?: Record<string, string> | null;
 }
 
 export interface XProfileSearchFilters {
@@ -848,6 +854,11 @@ export interface ListPeopleTasksParams {
   limit?: number | null;
   /** `next_cursor` from the previous page */
   cursor?: string | null;
+  /**
+   * Only tasks whose `metadata` has all of these key/value pairs (exact match, at most 3).
+   * Each pair is sent as a `metadata.<key>=<value>` query parameter. Keep the same filter when you page with `cursor`.
+   */
+  metadata?: Record<string, string> | null;
 }
 
 export interface GetPeopleResultsParams extends PeopleTaskParams {
@@ -934,6 +945,8 @@ export interface PeopleTask {
   count: number;
   /** How many qualified profiles were found so far */
   result_count: number;
+  /** The `metadata` sent when the search was created (`{}` when none) */
+  metadata: Record<string, string>;
   /** How the search was understood: criteria and the queries it ran */
   interpreted?: Record<string, unknown> | null;
   /** Progress counters */

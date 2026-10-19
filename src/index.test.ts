@@ -264,6 +264,7 @@ function peopleTask(overrides: Partial<PeopleTask> = {}): PeopleTask {
     query: 'Skincare creators who review sunscreen',
     count: 25,
     result_count: 0,
+    metadata: {},
     interpreted: null,
     progress: {},
     errors: [],
@@ -466,6 +467,98 @@ describe('People Search', () => {
     );
     expect(fetchCall(0).method).toBe('GET');
     expect(fetchCall(1).url).toBe(`${API}/desearch/people/tasks`);
+  });
+
+  it('sends metadata in the body of every search route and returns it on the task', async () => {
+    const metadata = { workspace_id: 'ws_42', campaign: 'q4-outbound' };
+    for (const platform of ['x', 'youtube', 'linkedin', 'tiktok'] as const) {
+      mockResponse({ body: peopleTask({ platform, metadata }), status: 202 });
+    }
+
+    const client = new Desearch('test-key');
+    const query = 'Heads of growth at devtools startups';
+    const tasks = [
+      await client.xProfileSearch({ query, metadata }),
+      await client.youtubeCreatorSearch({ query, metadata }),
+      await client.linkedinProfileSearch({ query, metadata }),
+      await client.tiktokCreatorSearch({ query, count: 5, metadata }),
+    ];
+
+    for (const task of tasks) {
+      expect(task.metadata).toEqual(metadata);
+    }
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/people/search/x`,
+      `${API}/desearch/people/search/youtube`,
+      `${API}/desearch/people/search/linkedin`,
+      `${API}/desearch/people/search/tiktok`,
+    ]);
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({ query, metadata });
+    expect(JSON.parse(fetchCall(3).body!)).toEqual({
+      query,
+      count: 5,
+      metadata,
+    });
+  });
+
+  it('leaves metadata out of the search body when it is not given', async () => {
+    mockResponse({ body: peopleTask(), status: 202 });
+
+    const client = new Desearch('test-key');
+    const task = await client.tiktokCreatorSearch({
+      query: 'Skincare creators',
+    });
+
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      query: 'Skincare creators',
+    });
+    expect(task.metadata).toEqual({});
+  });
+
+  it('lists tasks by metadata as metadata.<key>=<value> query params', async () => {
+    const list = {
+      tasks: [peopleTask({ metadata: { campaign: 'q4 outbound & more' } })],
+      next_cursor: null,
+    };
+    mockResponse({ body: list });
+    mockResponse({ body: { tasks: [], next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listPeopleTasks({
+        platform: 'tiktok',
+        status: ['completed', 'partial'],
+        limit: 5,
+        metadata: { campaign: 'q4 outbound & more', 'team.id': 't-1' },
+      })
+    ).resolves.toEqual(list);
+    await client.listPeopleTasks({ metadata: {} });
+
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/people/tasks?platform=tiktok&status=completed%2Cpartial&limit=5&metadata.campaign=q4+outbound+%26+more&metadata.team.id=t-1`
+    );
+    expect(fetchCall(1).url).toBe(`${API}/desearch/people/tasks`);
+    const params = new URL(fetchCall(0).url).searchParams;
+    expect(params.get('metadata.campaign')).toBe('q4 outbound & more');
+    expect(params.has('metadata')).toBe(false);
+  });
+
+  it('surfaces a rejected metadata filter as the standard HTTP error', async () => {
+    mockResponse({
+      body: '{"detail":"At most 3 metadata filters"}',
+      ok: false,
+      status: 400,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listPeopleTasks({
+        metadata: { a: '1', b: '2', c: '3', d: '4' },
+      })
+    ).rejects.toThrow('HTTP 400: {"detail":"At most 3 metadata filters"}');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/people/tasks?metadata.a=1&metadata.b=2&metadata.c=3&metadata.d=4`
+    );
   });
 
   it('gets one task by id', async () => {

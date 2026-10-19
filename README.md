@@ -281,7 +281,7 @@ const csv = await client.exportPeopleResults({
 writeFileSync(`people-${task.task_id}.csv`, csv);
 ```
 
-`xProfileSearch`, `youtubeCreatorSearch` and `linkedinProfileSearch` work the same way. Each request takes `query`, `count` (5-200, default 25), `min_score`, `exclude`, and that platform's `filters`. The types `XProfileSearchFilters`, `YouTubeCreatorSearchFilters`, `LinkedInProfileSearchFilters` and `TikTokCreatorSearchFilters` list the filters for each platform.
+`xProfileSearch`, `youtubeCreatorSearch` and `linkedinProfileSearch` work the same way. Each request takes `query`, `count` (5-200, default 25), `min_score`, `exclude`, `metadata`, and that platform's `filters`. The types `XProfileSearchFilters`, `YouTubeCreatorSearchFilters`, `LinkedInProfileSearchFilters` and `TikTokCreatorSearchFilters` list the filters for each platform.
 
 ### Pricing
 
@@ -297,6 +297,27 @@ Current prices are at <https://console.desearch.ai/pricing>.
 ### Idempotency
 
 Pass `{ idempotencyKey }` as the second argument of a search method. The SDK sends it as the `Idempotency-Key` header. If you retry a create call with the same key, the API returns the original task and does not charge again. Search methods also accept `{ includeMetadata: true }`, which returns the reservation's cost headers as `metadata`.
+
+### Tagging searches with metadata
+
+Pass `metadata` to label a search with your own keys, for example the campaign or workspace it belongs to. The task returns it as `metadata` (`{}` when none was sent), and `listPeopleTasks` can filter by it. The search itself never uses it.
+
+```ts
+await client.linkedinProfileSearch({
+  query: 'Heads of sales at fintech startups who post about outbound',
+  count: 25,
+  metadata: { campaign: 'q4-outbound', workspace_id: 'ws_42' },
+});
+
+// Later: every search of that campaign, newest first.
+const { tasks } = await client.listPeopleTasks({
+  metadata: { campaign: 'q4-outbound' },
+});
+console.log(tasks.map((t) => [t.task_id, t.status, t.metadata.workspace_id]));
+```
+
+- A search takes at most 10 keys. Keys are 1-40 characters of `a-z`, `0-9`, `_`, `.` or `-`; values are strings of at most 200 characters. The API answers 422 otherwise.
+- `listPeopleTasks` takes up to 3 pairs. The SDK sends each as a `metadata.<key>=<value>` query parameter, and a task must match all of them exactly. Keep the same filter when you page with `cursor`.
 
 ### Waiting and paging
 

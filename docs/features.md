@@ -53,7 +53,7 @@ Status legend:
 | `youtubeCreatorSearch` | `POST /desearch/people/search/youtube` | ✅ | Billed. Starts a YouTube Creator Search task. |
 | `linkedinProfileSearch` | `POST /desearch/people/search/linkedin` | ✅ | Billed. Starts a LinkedIn Profile Search task. |
 | `tiktokCreatorSearch` | `POST /desearch/people/search/tiktok` | ✅ | Billed. Starts a TikTok Creator Search task. |
-| `listPeopleTasks` | `GET /desearch/people/tasks` | ✅ | Free. `status` arrays are sent comma-separated; cursor pagination. |
+| `listPeopleTasks` | `GET /desearch/people/tasks` | ✅ | Free. `status` arrays are sent comma-separated; `metadata` pairs are sent as `metadata.<key>=<value>`; cursor pagination. |
 | `getPeopleTask` | `GET /desearch/people/tasks/{task_id}` | ✅ | Free. Status, progress and cost of one task. |
 | `getPeopleResults` | `GET /desearch/people/tasks/{task_id}/results` | ✅ | Free. One results page with `next_cursor` and `has_more`. |
 | `pausePeopleTask` | `POST /desearch/people/tasks/{task_id}/pause` | ✅ | Free. Throws `PeopleTaskConflictError` on 409. |
@@ -92,6 +92,7 @@ Status legend:
 
 - ✅ `XProfileSearchRequest`, `YouTubeCreatorSearchRequest`, `LinkedInProfileSearchRequest`, `TikTokCreatorSearchRequest`
 - ✅ `XProfileSearchFilters`, `YouTubeCreatorSearchFilters`, `LinkedInProfileSearchFilters`, `TikTokCreatorSearchFilters`
+- ✅ `PeopleSearchRequestBase` (`query`, `count`, `min_score`, `exclude`, `metadata`)
 - ✅ `PeopleSearchOptions` (`idempotencyKey`)
 - ✅ `PeopleResultFilters` (`has`, `min_audience`, `max_audience`, `min_score`, `location`, `verified`)
 - ✅ `PeopleTaskParams`, `ListPeopleTasksParams`, `GetPeopleResultsParams`, `ExportPeopleResultsParams`, `ListPeopleProfilesParams`, `ExportPeopleProfilesParams`, `WaitForPeopleTaskOptions`

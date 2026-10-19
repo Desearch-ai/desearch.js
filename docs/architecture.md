@@ -21,12 +21,14 @@ This file contains:
 - the `Desearch` class
 - the shared private `handleRequest<T>()` helper
 - response metadata parsing helpers for optional cost/usage visibility
-- all 13 public SDK methods
+- all public SDK methods
+- `PeopleTaskConflictError`, the error class thrown when a People Search task action is refused
 
-Those public methods fall into three groups:
+Those public methods fall into four groups:
 - AI search methods
 - X or Twitter methods
 - web methods
+- People Search methods and helpers
 
 ### `src/types.ts`
 
@@ -77,8 +79,16 @@ That keeps construction simple, but it makes staging, local, or self-hosted targ
 Every public method delegates to:
 
 ```ts
-private async handleRequest<T>(method: string, path: string, payload?: unknown): Promise<T>
+private async handleRequest<T>(
+  method: string,
+  path: string,
+  payload?: unknown,
+  options?: DesearchRequestOptions,
+  config?: RequestConfig
+): Promise<T | DesearchResponse<T>>
 ```
+
+`config` is internal. People Search uses it to add an `Idempotency-Key` header and to build `PeopleTaskConflictError` from a 409 response.
 
 That helper owns the full transport flow.
 
@@ -96,11 +106,13 @@ All requests include:
 { Authorization: this.apiKey }
 ```
 
-For POST requests only, the helper also adds:
+For POST requests with a payload, the helper also adds:
 
 ```ts
 { 'Content-Type': 'application/json' }
 ```
+
+People Search create calls add `Idempotency-Key` when the caller passes `idempotencyKey`. Extra headers can never replace `Authorization`.
 
 ### 3. GET serialization
 
@@ -165,9 +177,11 @@ The helper uses two error paths:
 - HTTP failures become `Error('HTTP <status>: <body>')`
 - everything else becomes `Error('Unexpected Error: <message>')`
 
+A method can pass its own error builder in `config`. The only one today is for People Search pause, resume and cancel. When one of those calls returns 409 with `{ detail, task }`, the helper throws a `PeopleTaskConflictError`. That error keeps the `HTTP 409: <body>` message and adds `status`, `detail` and `task`.
+
 Why this matters:
 - callers get a consistent thrown message shape
-- callers do not get typed SDK error classes or structured error instances
+- apart from `PeopleTaskConflictError`, callers do not get typed SDK error classes or structured error instances
 
 ## Method groups
 
@@ -216,6 +230,22 @@ These use GET requests:
 The main difference is the response shape:
 - `webSearch` expects JSON
 - `extract` and `webCrawl` can return text or HTML, and the SDK treats non-JSON responses as text
+
+### People Search methods
+
+People Search searches run as background tasks:
+- `xProfileSearch`, `youtubeCreatorSearch`, `linkedinProfileSearch` and `tiktokCreatorSearch` POST a JSON body and return the created task (HTTP 202). These are the only billed People Search calls.
+- `listPeopleTasks`, `getPeopleTask`, `getPeopleResults`, `exportPeopleResults`, `listPeopleProfiles` and `exportPeopleProfiles` are free GET calls.
+- `pausePeopleTask`, `resumePeopleTask` and `cancelPeopleTask` are free POST calls with no body.
+
+Transport details:
+- `task_id` is URL-encoded into the path and left out of the query string
+- array query parameters (`has`, `status`) are joined with commas, which the API expects, instead of the repeated-key encoding other GET methods use; empty arrays are omitted
+- the exports return CSV or JSON Lines as text, because those responses are not `application/json`
+
+Two helpers build on these methods without changing the transport:
+- `waitForPeopleTask` calls `getPeopleTask` until the status is `completed`, `partial`, `failed`, `cancelled` or `expired`. It waits `intervalMs` between polls, throws once `timeoutMs` has passed, and calls `onProgress` after every poll.
+- `iterPeopleResultPages` is an async generator. It calls `getPeopleResults` and follows `next_cursor` until `has_more` is false.
 
 ## Type-system design
 

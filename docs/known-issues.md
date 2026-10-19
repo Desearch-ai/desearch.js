@@ -62,6 +62,7 @@ throw new Error(`Unexpected Error: ${error instanceof Error ? error.message : St
 Impact:
 - there is no typed SDK error hierarchy
 - downstream consumers must inspect error strings if they want to branch by failure type
+- the one exception is `PeopleTaskConflictError`, which People Search pause, resume and cancel throw on HTTP 409 with the current task attached
 
 Why unresolved:
 `src/types.ts` includes API error payload interfaces, but the runtime layer does not map HTTP failures into typed error classes or structured error objects.
@@ -83,6 +84,7 @@ const response = await fetch(url, {
 Impact:
 - consumers must implement resilience policy outside the SDK
 - long-running requests cannot be cancelled through the public client API
+- `waitForPeopleTask` has a polling timeout (`timeoutMs`) but no AbortSignal, so a wait in progress cannot be stopped early, and a failed poll request ends the wait with that error
 
 Why unresolved:
 The SDK keeps constructor and method signatures minimal. Exposing transport controls would expand the public API and require explicit policy choices this repo has not made yet.
@@ -155,16 +157,16 @@ Impact:
 Why unresolved:
 The package has test tooling wired into `package.json`, but the current repository tree does not include test files.
 
-## 9. No write or mutation endpoints are exposed
+## 9. Write operations are limited to People Search tasks
 
-Status: ❌ broken for that use case
+Status: ⚠️ degraded for that use case
 
 Evidence:
-All public methods in `src/index.ts` are read, search, or extraction wrappers. There are no account, mutation, ingestion, or write operations exported from the SDK.
+Most public methods in `src/index.ts` are read, search, or extraction wrappers. The only write operations are the People Search ones: they create tasks (`xProfileSearch`, `youtubeCreatorSearch`, `linkedinProfileSearch`, `tiktokCreatorSearch`) and pause, resume or cancel them. There are no account, ingestion, or other write operations exported from the SDK.
 
 Impact:
 - unsupported operations must be called directly over HTTP outside this package
-- the SDK only covers the current read-side surface implemented in source today
+- apart from People Search tasks, the SDK only covers the current read-side surface implemented in source today
 
 Why unresolved:
 The repo only implements the public endpoints that are present in `src/index.ts`. Expanding beyond that would require new upstream API coverage and new SDK method design.

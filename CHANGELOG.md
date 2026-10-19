@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0
+
+- Added `metadata` to the People Search requests (`xProfileSearch`, `youtubeCreatorSearch`, `linkedinProfileSearch`, `tiktokCreatorSearch`): your own string labels for a search, stored on the task and never used by the search.
+- Added `metadata` to `PeopleTask` (`{}` when the search had none).
+- Added a `metadata` filter to `listPeopleTasks`. The SDK sends each pair as a `metadata.<key>=<value>` query parameter (up to 3, exact match).
+
 ## 1.6.0
 
 - Added People Search. Four billed search methods start a background task: `xProfileSearch`, `youtubeCreatorSearch`, `linkedinProfileSearch` and `tiktokCreatorSearch`. Pass `idempotencyKey` to send an `Idempotency-Key` header.

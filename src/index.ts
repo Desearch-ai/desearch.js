@@ -238,6 +238,18 @@ export class Desearch {
     return query;
   }
 
+  /** `listPeopleTasks` query params: the `metadata` filter becomes one `metadata.<key>=<value>` param per pair. */
+  private peopleTaskListQuery(
+    params: ListPeopleTasksParams
+  ): Record<string, unknown> {
+    const { metadata, ...rest } = params;
+    const query = this.peopleQuery(rest);
+    for (const [key, value] of Object.entries(metadata ?? {})) {
+      query[`metadata.${key}`] = value;
+    }
+    return query;
+  }
+
   private parsePeopleTaskConflict(
     status: number,
     body: string
@@ -795,7 +807,7 @@ export class Desearch {
    * `count` profiles are reserved at the route price and the task settles to the profiles it delivers
    * (a minimum applies when it finds anyone; a search that finds no one is free).
    *
-   * @param payload - The search request including query, count, min_score, exclude, and X-specific filters.
+   * @param payload - The search request including query, count, min_score, exclude, metadata, and X-specific filters.
    * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
    * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
    */
@@ -825,7 +837,7 @@ export class Desearch {
    * `count` profiles are reserved at the route price and the task settles to the profiles it delivers
    * (a minimum applies when it finds anyone; a search that finds no one is free).
    *
-   * @param payload - The search request including query, count, min_score, exclude, and YouTube-specific filters.
+   * @param payload - The search request including query, count, min_score, exclude, metadata, and YouTube-specific filters.
    * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
    * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
    */
@@ -855,7 +867,7 @@ export class Desearch {
    * `count` profiles are reserved at the route price and the task settles to the profiles it delivers
    * (a minimum applies when it finds anyone; a search that finds no one is free).
    *
-   * @param payload - The search request including query, count, min_score, exclude, and LinkedIn-specific filters.
+   * @param payload - The search request including query, count, min_score, exclude, metadata, and LinkedIn-specific filters.
    * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
    * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
    */
@@ -885,7 +897,7 @@ export class Desearch {
    * `count` profiles are reserved at the route price and the task settles to the profiles it delivers
    * (a minimum applies when it finds anyone; a search that finds no one is free).
    *
-   * @param payload - The search request including query, count, min_score, exclude, and TikTok-specific filters.
+   * @param payload - The search request including query, count, min_score, exclude, metadata, and TikTok-specific filters.
    * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
    * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
    */
@@ -911,7 +923,7 @@ export class Desearch {
   /**
    * List your company's People Search tasks, newest first. Free.
    *
-   * @param params - Optional platform, status (one status or an array, sent comma-separated), limit, and cursor.
+   * @param params - Optional platform, status (one status or an array, sent comma-separated), limit, cursor, and a `metadata` filter (sent as `metadata.<key>=<value>` query params; up to 3 exact-match pairs).
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
    * @returns A page of tasks with `next_cursor` for the next page, or a metadata wrapper when opted in.
    */
@@ -934,7 +946,7 @@ export class Desearch {
     return this.handleRequest<PeopleTaskList>(
       'GET',
       '/desearch/people/tasks',
-      this.peopleQuery(params),
+      this.peopleTaskListQuery(params),
       options
     );
   }

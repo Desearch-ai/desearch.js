@@ -241,6 +241,7 @@ People Search searches run as background tasks:
 Transport details:
 - `task_id` is URL-encoded into the path and left out of the query string
 - array query parameters (`has`, `status`) are joined with commas, which the API expects, instead of the repeated-key encoding other GET methods use; empty arrays are omitted
+- the `listPeopleTasks` `metadata` filter is flattened to one `metadata.<key>=<value>` query parameter per pair; an empty object adds nothing
 - the exports return CSV or JSON Lines as text, because those responses are not `application/json`
 
 Two helpers build on these methods without changing the transport:

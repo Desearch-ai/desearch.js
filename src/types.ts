@@ -909,6 +909,55 @@ export interface WaitForPeopleTaskOptions {
   onProgress?: (task: PeopleTask) => void;
 }
 
+/**
+ * Why a People Search ended. `null` on the task while it is queued, running or paused.
+ *
+ * - `count_reached`: it found `count` profiles.
+ * - `rounds_exhausted`: it ran every search it planned and found fewer than `count`.
+ * - `no_candidates`: its searches found nobody to check.
+ * - `zero_qualified`: it checked the people its searches found and none fit.
+ * - `candidate_budget`: it checked as many candidates as a search of this `count` may.
+ * - `cost_limit`: what searching cost reached what its results would bill, so it stopped.
+ * - `time_limit`: it ran for its maximum time.
+ * - `cancelled`: it was cancelled.
+ * - `failed`: an error ended it.
+ */
+export type PeopleCompletionReason =
+  | 'count_reached'
+  | 'rounds_exhausted'
+  | 'no_candidates'
+  | 'zero_qualified'
+  | 'candidate_budget'
+  | 'cost_limit'
+  | 'time_limit'
+  | 'cancelled'
+  | 'failed';
+
+/** Something that made part of a search less reliable without failing it. */
+export interface PeopleTaskWarning {
+  /**
+   * Warning code. `partial_enrichment`: some candidates' profiles could not be read after search,
+   * so they were scored on what the search returned (their results have `attributes.enrichment` = `failed`).
+   */
+  code: 'partial_enrichment' | (string & {});
+  /** Platform the warning is about */
+  platform?: PeoplePlatform | null;
+  /** Profile lookups tried (YouTube: channels) */
+  attempted?: number | null;
+  /** Lookups that read the profile */
+  enriched?: number | null;
+  /** Lookups that could not read the profile */
+  failed?: number | null;
+  /**
+   * LinkedIn and TikTok: failed lookups by reason (`not_found`, `rate_limited`, `timeout`,
+   * `upstream_error`, `request_error`). YouTube: failed lookups by source (`about_page_failed`,
+   * `innertube_failed`).
+   */
+  by_reason?: Record<string, number>;
+  /** Human-readable summary */
+  message?: string | null;
+}
+
 export interface PeopleTaskLinks {
   /** API path of the task */
   self: string;
@@ -953,6 +1002,16 @@ export interface PeopleTask {
   progress: Record<string, unknown>;
   /** Errors the task ran into */
   errors: unknown[];
+  /** Why the search ended; `null` while it is queued, running or paused */
+  completion_reason?: PeopleCompletionReason | null;
+  /**
+   * True when a budget (`completion_reason` `cost_limit`, `candidate_budget` or `time_limit`) stopped
+   * the search before it reached `count`: there may be more matching people than it returned.
+   * `status` is still `completed` in that case.
+   */
+  coverage_limited?: boolean;
+  /** What made part of the search less reliable without failing it (`[]` when nothing did) */
+  warnings?: PeopleTaskWarning[];
   /** Amount reserved when the task was created, in USD */
   reserved_cost_usd: number;
   /** Final cost once the task has ended, in USD. The rest of the reservation is returned. */
@@ -1010,6 +1069,26 @@ export interface PeopleEvidence {
   metrics?: Record<string, unknown> | null;
 }
 
+/** Verdict of one criterion check. */
+export type PeopleCriterionVerdict = 'met' | 'not_met' | 'unknown';
+
+/** One of the search's criteria, checked against the person's own profile and posts. */
+export interface PeopleCriterionCheck {
+  /** The criterion, word for word */
+  criterion: string;
+  /**
+   * `met`: a quote from the profile or a source shows it. `not_met`: the evidence contradicts it.
+   * `unknown`: nothing found shows it either way. For a `Disqualifier:` criterion, `met` means it applies.
+   */
+  verdict: PeopleCriterionVerdict;
+  /** The verbatim text behind a `met` verdict */
+  quote?: string | null;
+  /** Where the quote is: the post, video or profile URL */
+  source_url?: string | null;
+  /** A short explanation of the verdict */
+  reason?: string;
+}
+
 export interface PeopleScore {
   /** Fit score (0-100) */
   value?: number | null;
@@ -1029,6 +1108,16 @@ export interface PeopleScore {
   reasons: string[];
   /** Reasons the match may be weaker */
   concerns: string[];
+  /**
+   * One check per criterion. Information only: a qualified result can still have `unknown` criteria.
+   * Empty or missing on results scored before 2026-10-20.
+   */
+  criteria_checks?: PeopleCriterionCheck[];
+  /**
+   * True when every criterion is `met` and no `Disqualifier:` criterion is.
+   * Missing on results scored before 2026-10-20.
+   */
+  fully_verified?: boolean | null;
 }
 
 export interface PersonMetrics {
@@ -1069,6 +1158,27 @@ export interface PersonContact {
   source_url?: string | null;
 }
 
+/** Why a profile could not be read after search. */
+export type PeopleEnrichmentError =
+  | 'not_found'
+  | 'rate_limited'
+  | 'timeout'
+  | 'upstream_error'
+  | 'request_error';
+
+/** Platform-specific details of a person. */
+export interface PersonAttributes {
+  /**
+   * LinkedIn, TikTok and YouTube: `ok` when the profile was read after search, `failed` when it
+   * could not be. Then fields such as location, followers, experience or channel links come from
+   * the search hit only or are missing.
+   */
+  enrichment?: 'ok' | 'failed';
+  /** Why the profile could not be read, when `enrichment` is `failed` */
+  enrichment_error?: PeopleEnrichmentError | (string & {}) | null;
+  [key: string]: unknown;
+}
+
 /** One qualified profile (X, LinkedIn) or creator (YouTube, TikTok). */
 export interface Person {
   /** Stable person ID, e.g. x:handle */
@@ -1089,8 +1199,8 @@ export interface Person {
   location?: string | null;
   /** Audience and activity numbers */
   metrics: PersonMetrics;
-  /** Platform-specific details such as verified, headline, company, region */
-  attributes?: Record<string, unknown> | null;
+  /** Platform-specific details such as verified, headline, company, region, enrichment */
+  attributes?: PersonAttributes | null;
   /** Links found on the profile */
   links: PersonLink[];
   /** Public contacts such as emails */

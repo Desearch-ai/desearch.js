@@ -319,6 +319,43 @@ console.log(tasks.map((t) => [t.task_id, t.status, t.metadata.workspace_id]));
 - A search takes at most 10 keys. Keys are 1-40 characters of `a-z`, `0-9`, `_`, `.` or `-`; values are strings of at most 200 characters. The API answers 422 otherwise.
 - `listPeopleTasks` takes up to 3 pairs. The SDK sends each as a `metadata.<key>=<value>` query parameter, and a task must match all of them exactly. Keep the same filter when you page with `cursor`.
 
+### Reading a finished search
+
+A finished task says why it ended and how complete it is. Each result says what was confirmed (1.8.0 and later):
+
+```ts
+const done = await client.waitForPeopleTask(task);
+
+// count_reached, rounds_exhausted, no_candidates, zero_qualified,
+// candidate_budget, cost_limit, time_limit, cancelled or failed.
+console.log(done.completion_reason);
+if (done.coverage_limited) {
+  // A budget stopped it before `count`: there may be more matching people.
+}
+for (const warning of done.warnings ?? []) {
+  // partial_enrichment: some profiles could not be read after search.
+  console.log(warning.code, warning.platform, `${warning.failed}/${warning.attempted}`, warning.by_reason);
+}
+
+for await (const page of client.iterPeopleResultPages({ task_id: task.task_id })) {
+  for (const person of page.results) {
+    const unconfirmed = (person.score?.criteria_checks ?? [])
+      .filter((check) => check.verdict !== 'met')
+      .map((check) => `${check.criterion} (${check.verdict})`);
+    console.log(person.handle, person.score?.fully_verified, unconfirmed);
+    if (person.attributes?.enrichment === 'failed') {
+      // Scored on the search hit only; enrichment_error says why (not_found, rate_limited, ...).
+      console.log('profile not read:', person.attributes.enrichment_error);
+    }
+  }
+}
+```
+
+- `completion_reason` is `null` while the task is queued, running or paused. A search that a budget stopped is still `completed`, so check `coverage_limited`.
+- `score.criteria_checks` has one check per criterion, with `verdict` `met`, `not_met` or `unknown`, and the `quote` and `source_url` behind a `met`. It is information only: a qualified person can still have `unknown` criteria. For a `Disqualifier:` criterion, `met` means it applies.
+- `score.fully_verified` is true when every criterion is `met` and no `Disqualifier:` criterion is. Results scored before 2026-10-20 have no `criteria_checks` or `fully_verified`.
+- The CSV export adds the columns `fully_verified` and `unverified_criteria`.
+
 ### Waiting and paging
 
 - `waitForPeopleTask(params, options?)` polls until the status is `completed`, `partial`, `failed`, `cancelled` or `expired`. It then returns the task. If the task has not ended within `timeoutMs`, it throws an `Error`. A `paused` task has not ended. `params` only needs `task_id`, so you can pass the task object itself.

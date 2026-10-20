@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0
+
+Types for the People Search response fields the API returns since 2026-10-20. All are optional and additive; no method changed.
+
+- `PeopleTask`: `completion_reason` (`PeopleCompletionReason`: `count_reached`, `rounds_exhausted`, `no_candidates`, `zero_qualified`, `candidate_budget`, `cost_limit`, `time_limit`, `cancelled`, `failed`; `null` while the task runs), `coverage_limited`, and `warnings` (`PeopleTaskWarning[]`, e.g. `partial_enrichment` with `attempted`, `enriched`, `failed` and `by_reason`).
+- `PeopleScore`: `criteria_checks` (`PeopleCriterionCheck[]`: `criterion`, `verdict` `met` / `not_met` / `unknown`, `quote`, `source_url`, `reason`) and `fully_verified`.
+- `Person.attributes` is now `PersonAttributes`: `enrichment` (`ok` or `failed`) and `enrichment_error` (`PeopleEnrichmentError`), plus any platform field as before.
+
 ## 1.7.0
 
 - Added `metadata` to the People Search requests (`xProfileSearch`, `youtubeCreatorSearch`, `linkedinProfileSearch`, `tiktokCreatorSearch`): your own string labels for a search, stored on the task and never used by the search.

@@ -108,6 +108,9 @@ Status legend:
 - ✅ `XTrendsResponse`
 - ✅ `PeopleTask`, `PeopleSearchTask` (task plus reservation cost fields), `PeopleTaskList`, `PeopleTaskConflictResponse`
 - ✅ `Person`, `PeopleScore`, `PeopleEvidence`, `PersonMetrics`, `PersonLink`, `PersonContact`
+- ✅ `PeopleCompletionReason`, `PeopleTaskWarning` (task `completion_reason`, `coverage_limited`, `warnings`)
+- ✅ `PeopleCriterionCheck`, `PeopleCriterionVerdict` (score `criteria_checks`, `fully_verified`)
+- ✅ `PersonAttributes`, `PeopleEnrichmentError` (`attributes.enrichment`, `attributes.enrichment_error`)
 - ✅ `PeopleResultsPage`, `PeopleProfile`, `PersonFoundBy`, `PeopleProfilesPage`
 
 ### Detailed X entity models

@@ -10,6 +10,8 @@ import type {
   DesearchResponse,
   ExportPeopleProfilesParams,
   ExportPeopleResultsParams,
+  PeopleCriterionCheck,
+  PeopleScore,
   ExtractParams,
   GetPeopleResultsParams,
   LinkedInProfileSearchRequest,
@@ -87,6 +89,27 @@ export class PeopleTaskConflictError extends Error {
     this.detail = response.detail;
     this.task = response.task;
   }
+}
+
+// Same rule as the API's CSV `unverified_criteria` column and the console.
+const DISQUALIFIER_CRITERION =
+  /\b(disqualif(?:y|ier|iers)|exclude|excluding|not a fit|not qualified)\b/i;
+
+/**
+ * The criteria a result's own profile and posts do not confirm: every criterion whose verdict is
+ * not `met`, plus every `Disqualifier:` criterion that is `met` (it applies). Their `criterion`
+ * texts are what the CSV export lists in `unverified_criteria`. A returned check with verdict `met`
+ * is a disqualifier that applies. Empty for results scored before criteria checks existed.
+ * Information only: the result still qualified.
+ */
+export function unverifiedCriteria(
+  score: PeopleScore | null | undefined
+): PeopleCriterionCheck[] {
+  return (score?.criteria_checks ?? []).filter(
+    (check) =>
+      Boolean(check?.criterion) &&
+      (check.verdict === 'met') === DISQUALIFIER_CRITERION.test(check.criterion)
+  );
 }
 
 export class Desearch {

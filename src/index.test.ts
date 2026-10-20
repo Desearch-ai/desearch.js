@@ -4,8 +4,17 @@ import { fetch } from 'undici';
 import Desearch, {
   Desearch as DesearchNamed,
   PeopleTaskConflictError,
+  unverifiedCriteria,
 } from './index';
-import type { PeopleTask, Person } from './index';
+import type {
+  PeopleCompletionReason,
+  PeopleCriterionCheck,
+  PeopleCriterionVerdict,
+  PeopleTask,
+  PeopleTaskWarning,
+  Person,
+  PersonAttributes,
+} from './index';
 
 vi.mock('undici', () => ({
   fetch: vi.fn(),
@@ -891,6 +900,215 @@ describe('People Search', () => {
     expect(fetchCall(0).url).toBe(
       `${API}/desearch/people/tasks/${TASK_ID}/results?cursor=5`
     );
+  });
+
+  it('returns why a task ended, whether a budget limited it, and its warnings', async () => {
+    const finished = peopleTask({
+      search_type: 'linkedin_profile_search',
+      platform: 'linkedin',
+      status: 'completed',
+      count: 5,
+      result_count: 5,
+      final_cost_usd: 0.25,
+      completion_reason: 'count_reached',
+      coverage_limited: false,
+      warnings: [
+        {
+          code: 'partial_enrichment',
+          platform: 'linkedin',
+          attempted: 20,
+          enriched: 13,
+          failed: 7,
+          by_reason: { not_found: 7 },
+          message:
+            '7 of 20 LinkedIn profiles could not be read after search; those candidates were scored on search data only, and results among them have attributes.enrichment = "failed".',
+        },
+      ],
+    });
+    const limited = peopleTask({
+      status: 'completed',
+      count: 50,
+      result_count: 12,
+      completion_reason: 'cost_limit',
+      coverage_limited: true,
+      warnings: [],
+    });
+    mockResponse({ body: finished });
+    mockResponse({ body: { tasks: [limited], next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    const task = await client.getPeopleTask({ task_id: TASK_ID });
+    expect(task).toEqual(finished);
+    expect(task.completion_reason).toBe('count_reached');
+    expect(task.coverage_limited).toBe(false);
+    const [warning] = task.warnings ?? [];
+    expect(warning.code).toBe('partial_enrichment');
+    expect(warning.by_reason).toEqual({ not_found: 7 });
+
+    const { tasks } = await client.listPeopleTasks({ status: 'completed' });
+    expect(tasks[0].completion_reason).toBe('cost_limit');
+    expect(tasks[0].coverage_limited).toBe(true);
+    expect(tasks[0].warnings).toEqual([]);
+  });
+
+  it('keeps a running task without a completion reason', async () => {
+    const running = peopleTask({
+      status: 'running',
+      stage: 'processing',
+      completion_reason: null,
+      coverage_limited: false,
+      warnings: [],
+    });
+    mockResponse({ body: running });
+
+    const client = new Desearch('test-key');
+    const task = await client.getPeopleTask({ task_id: TASK_ID });
+    expect(task.completion_reason).toBeNull();
+  });
+
+  it('returns criteria checks, fully_verified and the enrichment flag on results', async () => {
+    const verified: Person = {
+      ...person('ana-khutsishvili'),
+      platform: 'linkedin',
+      attributes: {
+        headline: 'Software Engineer at EPAM Systems',
+        company: 'EPAM Systems',
+        enrichment: 'ok',
+      },
+      score: {
+        ...person('ana-khutsishvili').score!,
+        criteria_checks: [
+          {
+            criterion: 'Profile fit: Software Engineer based in Georgia',
+            verdict: 'met',
+            quote: 'Software Engineer at EPAM Systems',
+            source_url: 'https://www.linkedin.com/in/ana-khutsishvili',
+            reason: 'Role and Tbilisi location supplied.',
+          },
+        ],
+        fully_verified: true,
+      },
+    };
+    const unread: Person = {
+      ...person('nino'),
+      platform: 'linkedin',
+      attributes: { enrichment: 'failed', enrichment_error: 'not_found' },
+      score: {
+        ...person('nino').score!,
+        criteria_checks: [
+          {
+            criterion: 'Profile fit: Software Engineer based in Georgia',
+            verdict: 'unknown',
+            quote: null,
+            source_url: null,
+            reason: 'No current location in the profile.',
+          },
+        ],
+        fully_verified: false,
+      },
+    };
+    const page = {
+      task_id: TASK_ID,
+      status: 'completed',
+      results: [verified, unread],
+      next_cursor: '2',
+      has_more: false,
+    };
+    mockResponse({ body: page });
+
+    const client = new Desearch('test-key');
+    const { results } = await client.getPeopleResults({ task_id: TASK_ID });
+    expect(results).toEqual(page.results);
+    expect(results.map((r) => r.score?.fully_verified)).toEqual([true, false]);
+    expect(results.map((r) => r.attributes?.enrichment)).toEqual([
+      'ok',
+      'failed',
+    ]);
+    expect(results[1].attributes?.enrichment_error).toBe('not_found');
+    expect(
+      unverifiedCriteria(results[1].score).map((check) => check.criterion)
+    ).toEqual(['Profile fit: Software Engineer based in Georgia']);
+    expect(unverifiedCriteria(results[0].score)).toEqual([]);
+  });
+
+  it('lists unverified criteria like the CSV column: unmet criteria and disqualifiers that apply', () => {
+    const checks: PeopleCriterionCheck[] = [
+      {
+        criterion: 'Profile fit: Heads of sales at fintech startups',
+        verdict: 'met',
+        quote: 'Head of Sales at Ramp',
+      },
+      { criterion: 'Topic signal: outbound', verdict: 'unknown', reason: '' },
+      {
+        criterion: 'Evidence quality: posts about pipeline',
+        verdict: 'not_met',
+      },
+      {
+        criterion: 'Disqualifier: exclude agencies',
+        verdict: 'met',
+        quote: 'our agency',
+      },
+      { criterion: 'Disqualifier: exclude students', verdict: 'unknown' },
+      { criterion: 'Disqualifier: recruiters', verdict: 'not_met' },
+    ];
+    const score = { ...person('a').score!, criteria_checks: checks };
+    expect(unverifiedCriteria(score).map((check) => check.criterion)).toEqual([
+      'Topic signal: outbound',
+      'Evidence quality: posts about pipeline',
+      'Disqualifier: exclude agencies',
+    ]);
+    expect(unverifiedCriteria(person('a').score)).toEqual([]);
+    expect(unverifiedCriteria(null)).toEqual([]);
+    expect(unverifiedCriteria(undefined)).toEqual([]);
+  });
+
+  it('reads results scored before criteria checks existed', async () => {
+    const page = {
+      task_id: TASK_ID,
+      status: 'completed',
+      results: [person('glowwithmia')],
+      next_cursor: '1',
+      has_more: false,
+    };
+    mockResponse({ body: page });
+
+    const client = new Desearch('test-key');
+    const [result] = (await client.getPeopleResults({ task_id: TASK_ID }))
+      .results;
+    expect(result.score?.criteria_checks).toBeUndefined();
+    expect(result.score?.fully_verified).toBeUndefined();
+    expect(result.attributes).toBeUndefined();
+  });
+
+  it('types the new task and result fields to the values the API returns', () => {
+    // Type-only checks: compiled by `tsc --noEmit`, never run against the API.
+    const reason: PeopleCompletionReason = 'candidate_budget';
+    // @ts-expect-error stop_reason values such as no_more_queries are not completion reasons
+    const internal: PeopleCompletionReason = 'no_more_queries';
+    const check: PeopleCriterionCheck = {
+      criterion: 'Topic signal: coding or development work',
+      verdict: 'not_met',
+      reason: 'Posts are about marketing.',
+    };
+    // @ts-expect-error verdicts are met, not_met or unknown
+    const badVerdict: PeopleCriterionVerdict = 'maybe';
+    const warning: PeopleTaskWarning = { code: 'partial_enrichment' };
+    const attributes: PersonAttributes = {
+      enrichment: 'failed',
+      enrichment_error: 'rate_limited',
+      region: 'US',
+    };
+    // @ts-expect-error enrichment is ok or failed
+    const badEnrichment: PersonAttributes = { enrichment: 'partial' };
+    expect([
+      reason,
+      internal,
+      check,
+      badVerdict,
+      warning,
+      attributes,
+      badEnrichment,
+    ]).toHaveLength(7);
   });
 
   it('types the has filter to the channels the API accepts', () => {

@@ -355,9 +355,9 @@ for await (const page of client.iterPeopleResultPages({ task_id: task.task_id })
 ```
 
 - `completion_reason` is `null` while the task is queued, running or paused. A search that a budget stopped is still `completed`, so check `coverage_limited`.
-- `score.criteria_checks` has one check per criterion, with `verdict` `met`, `not_met` or `unknown`, and the `quote` and `source_url` behind a `met`. It is information only: a qualified person can still have `unknown` criteria. For a `Disqualifier:` criterion, `met` means it applies.
-- `score.fully_verified` is true when every criterion is `met` and no `Disqualifier:` criterion is. Results scored before 2026-10-20 have no `criteria_checks` or `fully_verified`.
-- `unverifiedCriteria(score)` returns the checks that are not confirmed: every criterion that is not `met`, and every `Disqualifier:` criterion that is `met`. Their `criterion` texts are what the CSV export lists in its new `unverified_criteria` column, next to `fully_verified`.
+- `score.criteria_checks` has one check per criterion, with `verdict` `met`, `not_met` or `unknown`, and the `quote` and `source_url` behind a `met`. It is information only: a qualified person can still have `unknown` criteria. For a disqualifier (`is_disqualifier`, 1.8.1 and later), `met` means it applies.
+- `score.fully_verified` is true when every criterion is `met` and no disqualifier is. Results scored before 2026-10-20 have no `criteria_checks` or `fully_verified`.
+- `unverifiedCriteria(score)` returns the checks that are not confirmed: every criterion that is not `met`, and every disqualifier that is `met`. It reads `is_disqualifier`, and the API's keyword rule for older checks without it. Their `criterion` texts are what the CSV export lists in its new `unverified_criteria` column, next to `fully_verified`.
 
 ### Waiting and paging
 

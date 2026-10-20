@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.1
+
+- Added `is_disqualifier` to `PeopleCriterionCheck`: true when the criterion is a disqualifier, so `met` means it applies. The API returns it since 2026-10-20; older checks do not have it.
+- `unverifiedCriteria(score)` reads `is_disqualifier` when a check has it, and falls back to the API's keyword rule when it does not, like the CSV `unverified_criteria` column.
+
 ## 1.8.0
 
 Types for the People Search response fields the API returns since 2026-10-20. New fields are optional and additive; no existing method changed.

@@ -1078,7 +1078,7 @@ export interface PeopleCriterionCheck {
   criterion: string;
   /**
    * `met`: a quote from the profile or a source shows it. `not_met`: the evidence contradicts it.
-   * `unknown`: nothing found shows it either way. For a `Disqualifier:` criterion, `met` means it applies.
+   * `unknown`: nothing found shows it either way. For a disqualifier (`is_disqualifier`), `met` means it applies.
    */
   verdict: PeopleCriterionVerdict;
   /** The verbatim text behind a `met` verdict */
@@ -1087,6 +1087,11 @@ export interface PeopleCriterionCheck {
   source_url?: string | null;
   /** A short explanation of the verdict */
   reason?: string;
+  /**
+   * True when this criterion is a disqualifier, so `met` means it applies. Missing on checks scored
+   * before the field existed (2026-10-20).
+   */
+  is_disqualifier?: boolean | null;
 }
 
 export interface PeopleScore {
@@ -1114,7 +1119,7 @@ export interface PeopleScore {
    */
   criteria_checks?: PeopleCriterionCheck[];
   /**
-   * True when every criterion is `met` and no `Disqualifier:` criterion is.
+   * True when every criterion is `met` and no disqualifier (`is_disqualifier`) is.
    * Missing on results scored before 2026-10-20.
    */
   fully_verified?: boolean | null;

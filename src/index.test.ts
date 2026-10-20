@@ -1062,6 +1062,43 @@ describe('People Search', () => {
     expect(unverifiedCriteria(undefined)).toEqual([]);
   });
 
+  it('uses is_disqualifier when the check has it, and the keyword rule when it does not', () => {
+    const score = {
+      ...person('a').score!,
+      criteria_checks: [
+        // The flag wins over the wording, both ways.
+        {
+          criterion: 'Profile fit: excluding agencies is fine',
+          verdict: 'met',
+          is_disqualifier: false,
+        },
+        {
+          criterion: 'Agency owners',
+          verdict: 'met',
+          is_disqualifier: true,
+        },
+        {
+          criterion: 'Disqualifier: students',
+          verdict: 'unknown',
+          is_disqualifier: true,
+        },
+        // No flag (scored before it existed) or null: the keyword rule.
+        { criterion: 'Disqualifier: recruiters', verdict: 'met' },
+        {
+          criterion: 'Not qualified leads',
+          verdict: 'met',
+          is_disqualifier: null,
+        },
+        { criterion: 'Topic signal: excludes nothing', verdict: 'met' },
+      ] as PeopleCriterionCheck[],
+    };
+    expect(unverifiedCriteria(score).map((check) => check.criterion)).toEqual([
+      'Agency owners',
+      'Disqualifier: recruiters',
+      'Not qualified leads',
+    ]);
+  });
+
   it('reads results scored before criteria checks existed', async () => {
     const page = {
       task_id: TASK_ID,

@@ -91,15 +91,23 @@ export class PeopleTaskConflictError extends Error {
   }
 }
 
-// Same rule as the API's CSV `unverified_criteria` column and the console.
+// Fallback for checks without `is_disqualifier`: the worker's keyword rule, which also sets the
+// flag. Same rule as the API's CSV `unverified_criteria` column.
 const DISQUALIFIER_CRITERION =
   /\b(disqualif(?:y|ier|iers)|exclude|excluding|not a fit|not qualified)\b/i;
 
+function isDisqualifier(check: PeopleCriterionCheck): boolean {
+  return typeof check.is_disqualifier === 'boolean'
+    ? check.is_disqualifier
+    : DISQUALIFIER_CRITERION.test(check.criterion);
+}
+
 /**
  * The criteria a result's own profile and posts do not confirm: every criterion whose verdict is
- * not `met`, plus every `Disqualifier:` criterion that is `met` (it applies). Their `criterion`
- * texts are what the CSV export lists in `unverified_criteria`. A returned check with verdict `met`
- * is a disqualifier that applies. Empty for results scored before criteria checks existed.
+ * not `met`, plus every disqualifier (`is_disqualifier`) that is `met` (it applies). Their
+ * `criterion` texts are what the CSV export lists in `unverified_criteria`. A returned check with
+ * verdict `met` is a disqualifier that applies. Checks scored before `is_disqualifier` existed use
+ * the same keyword rule the API uses. Empty for results scored before criteria checks existed.
  * Information only: the result still qualified.
  */
 export function unverifiedCriteria(
@@ -108,7 +116,7 @@ export function unverifiedCriteria(
   return (score?.criteria_checks ?? []).filter(
     (check) =>
       Boolean(check?.criterion) &&
-      (check.verdict === 'met') === DISQUALIFIER_CRITERION.test(check.criterion)
+      (check.verdict === 'met') === isDisqualifier(check)
   );
 }
 

@@ -4,6 +4,7 @@ import { fetch } from 'undici';
 import Desearch, {
   Desearch as DesearchNamed,
   PeopleTaskConflictError,
+  unverifiedCriteria,
 } from './index';
 import type {
   PeopleCompletionReason,
@@ -1024,12 +1025,41 @@ describe('People Search', () => {
       'failed',
     ]);
     expect(results[1].attributes?.enrichment_error).toBe('not_found');
-    const unconfirmed = results[1].score?.criteria_checks
-      ?.filter((check) => check.verdict !== 'met')
-      .map((check) => check.criterion);
-    expect(unconfirmed).toEqual([
-      'Profile fit: Software Engineer based in Georgia',
+    expect(
+      unverifiedCriteria(results[1].score).map((check) => check.criterion)
+    ).toEqual(['Profile fit: Software Engineer based in Georgia']);
+    expect(unverifiedCriteria(results[0].score)).toEqual([]);
+  });
+
+  it('lists unverified criteria like the CSV column: unmet criteria and disqualifiers that apply', () => {
+    const checks: PeopleCriterionCheck[] = [
+      {
+        criterion: 'Profile fit: Heads of sales at fintech startups',
+        verdict: 'met',
+        quote: 'Head of Sales at Ramp',
+      },
+      { criterion: 'Topic signal: outbound', verdict: 'unknown', reason: '' },
+      {
+        criterion: 'Evidence quality: posts about pipeline',
+        verdict: 'not_met',
+      },
+      {
+        criterion: 'Disqualifier: exclude agencies',
+        verdict: 'met',
+        quote: 'our agency',
+      },
+      { criterion: 'Disqualifier: exclude students', verdict: 'unknown' },
+      { criterion: 'Disqualifier: recruiters', verdict: 'not_met' },
+    ];
+    const score = { ...person('a').score!, criteria_checks: checks };
+    expect(unverifiedCriteria(score).map((check) => check.criterion)).toEqual([
+      'Topic signal: outbound',
+      'Evidence quality: posts about pipeline',
+      'Disqualifier: exclude agencies',
     ]);
+    expect(unverifiedCriteria(person('a').score)).toEqual([]);
+    expect(unverifiedCriteria(null)).toEqual([]);
+    expect(unverifiedCriteria(undefined)).toEqual([]);
   });
 
   it('reads results scored before criteria checks existed', async () => {

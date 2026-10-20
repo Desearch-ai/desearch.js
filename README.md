@@ -324,6 +324,8 @@ console.log(tasks.map((t) => [t.task_id, t.status, t.metadata.workspace_id]));
 A finished task says why it ended and how complete it is. Each result says what was confirmed (1.8.0 and later):
 
 ```ts
+import { unverifiedCriteria } from 'desearch-js';
+
 const done = await client.waitForPeopleTask(task);
 
 // count_reached, rounds_exhausted, no_candidates, zero_qualified,
@@ -339,10 +341,11 @@ for (const warning of done.warnings ?? []) {
 
 for await (const page of client.iterPeopleResultPages({ task_id: task.task_id })) {
   for (const person of page.results) {
-    const unconfirmed = (person.score?.criteria_checks ?? [])
-      .filter((check) => check.verdict !== 'met')
-      .map((check) => `${check.criterion} (${check.verdict})`);
-    console.log(person.handle, person.score?.fully_verified, unconfirmed);
+    // Criteria not confirmed, and disqualifiers that apply (verdict `met`).
+    const unverified = unverifiedCriteria(person.score).map(
+      (check) => `${check.criterion} (${check.verdict})`,
+    );
+    console.log(person.handle, person.score?.fully_verified, unverified);
     if (person.attributes?.enrichment === 'failed') {
       // Scored on the search hit only; enrichment_error says why (not_found, rate_limited, ...).
       console.log('profile not read:', person.attributes.enrichment_error);
@@ -354,7 +357,7 @@ for await (const page of client.iterPeopleResultPages({ task_id: task.task_id })
 - `completion_reason` is `null` while the task is queued, running or paused. A search that a budget stopped is still `completed`, so check `coverage_limited`.
 - `score.criteria_checks` has one check per criterion, with `verdict` `met`, `not_met` or `unknown`, and the `quote` and `source_url` behind a `met`. It is information only: a qualified person can still have `unknown` criteria. For a `Disqualifier:` criterion, `met` means it applies.
 - `score.fully_verified` is true when every criterion is `met` and no `Disqualifier:` criterion is. Results scored before 2026-10-20 have no `criteria_checks` or `fully_verified`.
-- The CSV export adds the columns `fully_verified` and `unverified_criteria`.
+- `unverifiedCriteria(score)` returns the checks that are not confirmed: every criterion that is not `met`, and every `Disqualifier:` criterion that is `met`. Their `criterion` texts are what the CSV export lists in its new `unverified_criteria` column, next to `fully_verified`.
 
 ### Waiting and paging
 

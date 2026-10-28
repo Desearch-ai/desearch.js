@@ -170,3 +170,22 @@ Impact:
 
 Why unresolved:
 The repo only implements the public endpoints that are present in `src/index.ts`. Expanding beyond that would require new upstream API coverage and new SDK method design.
+
+## 10. `streamNetworkStats` does not reconnect
+
+Status: ⚠️ degraded
+
+Evidence:
+
+```ts
+async *streamNetworkStats(options: StreamNetworkStatsOptions = {})
+```
+
+reads one HTTP response and returns when the server closes it.
+
+Impact:
+- unlike a browser `EventSource`, the iterator ends when the connection drops
+- callers who need a long-running feed must call it again with `lastEventId` set to the last event's `id`; the API then replays up to 20 minutes of missed snapshots
+
+Why unresolved:
+Reconnect policy (delays, retry limits, the `retry` field) is the same kind of transport decision as the timeout and retry controls in item 4, which the SDK leaves to callers.

@@ -177,13 +177,13 @@ export interface WebSearchParams {
 export interface ExtractParams {
   /** Public URL to extract content from */
   url: string;
-  /** Format of the content to be returned: 'html' or 'text' */
-  format?: 'html' | 'text';
+  /** Format of the content to be returned: 'text', 'markdown' or 'html' */
+  format?: 'html' | 'text' | 'markdown';
   /** Render JavaScript before extraction */
   js?: boolean;
   /** Optional post-load wait in milliseconds when JavaScript rendering is enabled */
   wait?: number;
-  /** With format 'text', return all visible text of the page instead of its main content */
+  /** Only with format 'text': return all visible text of the page instead of its main content */
   full_page?: boolean;
 }
 

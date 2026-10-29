@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.0
+
+- `ExtractParams.format` accepts `'markdown'`: `extract({ url, format: 'markdown' })` returns the page as markdown (headings, lists, tables and code).
+- `full_page` is documented as applying to `format: 'text'` only.
+
 ## 1.9.0
 
 - Added `full_page` to `ExtractParams`. With `format: 'text'`, `extract({ url, full_page: true })` returns all visible text of the page instead of its main content.

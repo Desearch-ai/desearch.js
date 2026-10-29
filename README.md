@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.9.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.10.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -202,7 +202,16 @@ const page = await client.extract({
 });
 ```
 
-`format: 'text'` returns the page's main content, which can leave out tables, notices and other sections. Pass `full_page: true` for all visible text of the page, one block per line.
+`format` is `'text'` (default), `'markdown'` or `'html'`. `'markdown'` keeps headings, lists, tables and code: the main content of articles and docs, and the whole page without its navigation otherwise.
+
+```ts
+const markdown = await client.extract({
+  url: 'https://en.wikipedia.org/wiki/Artificial_intelligence',
+  format: 'markdown',
+});
+```
+
+`format: 'text'` returns the page's main content, which can leave out tables, notices and other sections. Pass `full_page: true` (text only) for all visible text of the page, one block per line.
 
 ```ts
 const everything = await client.extract({

@@ -183,6 +183,8 @@ export interface ExtractParams {
   js?: boolean;
   /** Optional post-load wait in milliseconds when JavaScript rendering is enabled */
   wait?: number;
+  /** With format 'text', return all visible text of the page instead of its main content */
+  full_page?: boolean;
 }
 
 /** @deprecated Use ExtractParams for new integrations. */

@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.6.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.9.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -201,6 +201,18 @@ const page = await client.extract({
   format: 'text',
 });
 ```
+
+`format: 'text'` returns the page's main content, which can leave out tables, notices and other sections. Pass `full_page: true` for all visible text of the page, one block per line.
+
+```ts
+const everything = await client.extract({
+  url: 'https://peles.ro/en/program-si-taxe/',
+  format: 'text',
+  full_page: true,
+});
+```
+
+Pages that cannot be served throw an `HTTP <status>: <body>` error whose JSON body has an `error_code`, and they are not charged: `page_not_found` (404), `js_required` (422, retry with `js: true`), `blocked` (503, the site refused the request or answered with a bot check), `upstream_timeout` and `upstream_failed` (503).
 
 Existing `webCrawl()` integrations continue to use the deprecated `GET /web/crawl` compatibility route. Use `extract()` for new integrations.
 

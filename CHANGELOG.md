@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0
+
+- Added `full_page` to `ExtractParams`. With `format: 'text'`, `extract({ url, full_page: true })` returns all visible text of the page instead of its main content.
+
 ## 1.8.1
 
 - Added `is_disqualifier` to `PeopleCriterionCheck`: true when the criterion is a disqualifier, so `met` means it applies. The API returns it since 2026-10-20; older checks do not have it.

@@ -3,18 +3,31 @@ import type {
   AiSearchRequest,
   AiSearchResponse,
   AiWebLinksSearchRequest,
+  Company,
+  CompanyEnrichRequest,
+  CompanyResultsPage,
+  CompanyScore,
+  CompanySearchRequest,
+  CompanySearchTask,
+  CompanyTask,
+  CompanyTaskConflictResponse,
+  CompanyTaskList,
+  CompanyTaskParams,
   DesearchCostMetadata,
   DesearchDefaultRequestOptions,
   DesearchMetadataRequestOptions,
   DesearchRequestOptions,
   DesearchResponse,
+  ExportCompanyResultsParams,
   ExportPeopleProfilesParams,
   ExportPeopleResultsParams,
   PeopleCriterionCheck,
   PeopleScore,
   ExtractParams,
+  GetCompanyResultsParams,
   GetPeopleResultsParams,
   LinkedInProfileSearchRequest,
+  ListCompanyTasksParams,
   ListPeopleProfilesParams,
   ListPeopleTasksParams,
   PeoplePlatform,
@@ -28,6 +41,7 @@ import type {
   PeopleTaskParams,
   PeopleTaskStatus,
   TikTokCreatorSearchRequest,
+  WaitForCompanyTaskOptions,
   WaitForPeopleTaskOptions,
   XProfileSearchRequest,
   YouTubeCreatorSearchRequest,
@@ -54,7 +68,8 @@ import type {
 
 const BASE_URL = 'https://api.desearch.ai';
 
-const PEOPLE_TASK_END_STATUSES: readonly PeopleTaskStatus[] = [
+/** Statuses after which a People Search or company task no longer changes. */
+const TASK_END_STATUSES: readonly PeopleTaskStatus[] = [
   'completed',
   'partial',
   'failed',
@@ -91,6 +106,27 @@ export class PeopleTaskConflictError extends Error {
   }
 }
 
+/**
+ * Thrown by `pauseCompanyTask`, `resumeCompanyTask` and `cancelCompanyTask` when the task's
+ * status does not allow the action (HTTP 409). The message keeps the SDK's `HTTP <status>: <body>`
+ * format; `task` is the task as it is now.
+ */
+export class CompanyTaskConflictError extends Error {
+  /** HTTP status of the response */
+  readonly status = 409;
+  /** Why the action is not allowed */
+  readonly detail: string;
+  /** The task in its current state */
+  readonly task: CompanyTask;
+
+  constructor(body: string, response: CompanyTaskConflictResponse) {
+    super(`HTTP 409: ${body}`);
+    this.name = 'CompanyTaskConflictError';
+    this.detail = response.detail;
+    this.task = response.task;
+  }
+}
+
 // Fallback for checks without `is_disqualifier`: the worker's keyword rule, which also sets the
 // flag. Same rule as the API's CSV `unverified_criteria` column.
 const DISQUALIFIER_CRITERION =
@@ -103,15 +139,16 @@ function isDisqualifier(check: PeopleCriterionCheck): boolean {
 }
 
 /**
- * The criteria a result's own profile and posts do not confirm: every criterion whose verdict is
- * not `met`, plus every disqualifier (`is_disqualifier`) that is `met` (it applies). Their
- * `criterion` texts are what the CSV export lists in `unverified_criteria`. A returned check with
- * verdict `met` is a disqualifier that applies. Checks scored before `is_disqualifier` existed use
- * the same keyword rule the API uses. Empty for results scored before criteria checks existed.
+ * The criteria a result's own profile and posts (for a company, its own pages) do not confirm:
+ * every criterion whose verdict is not `met`, plus every disqualifier (`is_disqualifier`) that is
+ * `met` (it applies). Their `criterion` texts are what the CSV export lists in
+ * `unverified_criteria`. A returned check with verdict `met` is a disqualifier that applies. Checks
+ * scored before `is_disqualifier` existed use the same keyword rule the API uses. Empty for results
+ * scored before criteria checks existed, and for Company Enrich results (`score` is null).
  * Information only: the result still qualified.
  */
 export function unverifiedCriteria(
-  score: PeopleScore | null | undefined
+  score: PeopleScore | CompanyScore | null | undefined
 ): PeopleCriterionCheck[] {
   return (score?.criteria_checks ?? []).filter(
     (check) =>
@@ -253,8 +290,14 @@ export class Desearch {
     )}${suffix}`;
   }
 
-  /** People Search query params: drops `task_id` (it goes in the path) and joins arrays with commas. */
-  private peopleQuery(params: object): Record<string, unknown> {
+  private companyTaskPath(params: CompanyTaskParams, suffix = ''): string {
+    return `/desearch/companies/tasks/${encodeURIComponent(
+      params.task_id
+    )}${suffix}`;
+  }
+
+  /** Task route query params: drops `task_id` (it goes in the path) and joins arrays with commas. */
+  private taskQuery(params: object): Record<string, unknown> {
     const query: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(params)) {
       if (key === 'task_id') continue;
@@ -269,38 +312,56 @@ export class Desearch {
     return query;
   }
 
-  /** `listPeopleTasks` query params: the `metadata` filter becomes one `metadata.<key>=<value>` param per pair. */
-  private peopleTaskListQuery(
-    params: ListPeopleTasksParams
+  /** `listPeopleTasks` and `listCompanyTasks` query params: the `metadata` filter becomes one `metadata.<key>=<value>` param per pair. */
+  private taskListQuery(
+    params: ListPeopleTasksParams | ListCompanyTasksParams
   ): Record<string, unknown> {
     const { metadata, ...rest } = params;
-    const query = this.peopleQuery(rest);
+    const query = this.taskQuery(rest);
     for (const [key, value] of Object.entries(metadata ?? {})) {
       query[`metadata.${key}`] = value;
     }
     return query;
   }
 
-  private parsePeopleTaskConflict(
+  /** Builds the conflict error from the `{ detail, task }` 409 body of pause, resume and cancel. */
+  private parseTaskConflict<T>(
     status: number,
-    body: string
+    body: string,
+    createError: (body: string, response: { detail: string; task: T }) => Error
   ): Error | undefined {
     if (status !== 409) {
       return undefined;
     }
 
     try {
-      const parsed = JSON.parse(body) as Partial<PeopleTaskConflictResponse>;
+      const parsed = JSON.parse(body) as { detail?: unknown; task?: unknown };
       if (parsed && typeof parsed.task === 'object' && parsed.task !== null) {
-        return new PeopleTaskConflictError(body, {
+        return createError(body, {
           detail: typeof parsed.detail === 'string' ? parsed.detail : '',
-          task: parsed.task,
+          task: parsed.task as T,
         });
       }
     } catch {
-      // Not the People Search 409 body: fall back to the default error.
+      // Not the task 409 body: fall back to the default error.
     }
     return undefined;
+  }
+
+  /** POSTs a billed task create call, with `Idempotency-Key` when the caller passes `idempotencyKey`. */
+  private createTask<T>(
+    path: string,
+    payload: unknown,
+    options?: DesearchRequestOptions & PeopleSearchOptions
+  ): Promise<T | DesearchResponse<T>> {
+    const idempotencyKey = options?.idempotencyKey;
+    return this.handleRequest<T>(
+      'POST',
+      path,
+      payload,
+      options,
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}
+    );
   }
 
   private peopleSearch(
@@ -308,13 +369,10 @@ export class Desearch {
     payload: unknown,
     options?: DesearchRequestOptions & PeopleSearchOptions
   ): Promise<PeopleSearchTask | DesearchResponse<PeopleSearchTask>> {
-    const idempotencyKey = options?.idempotencyKey;
-    return this.handleRequest<PeopleSearchTask>(
-      'POST',
+    return this.createTask<PeopleSearchTask>(
       `/desearch/people/search/${platform}`,
       payload,
-      options,
-      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}
+      options
     );
   }
 
@@ -330,9 +388,68 @@ export class Desearch {
       options,
       {
         onErrorResponse: (status, body) =>
-          this.parsePeopleTaskConflict(status, body),
+          this.parseTaskConflict<PeopleTask>(
+            status,
+            body,
+            (text, response) => new PeopleTaskConflictError(text, response)
+          ),
       }
     );
+  }
+
+  private companyTaskControl(
+    action: 'pause' | 'resume' | 'cancel',
+    params: CompanyTaskParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>> {
+    return this.handleRequest<CompanyTask>(
+      'POST',
+      this.companyTaskPath(params, `/${action}`),
+      undefined,
+      options,
+      {
+        onErrorResponse: (status, body) =>
+          this.parseTaskConflict<CompanyTask>(
+            status,
+            body,
+            (text, response) => new CompanyTaskConflictError(text, response)
+          ),
+      }
+    );
+  }
+
+  /** Polls `getTask` until the task's status is an end status; shared by the wait helpers. */
+  private async pollTask<T extends { status: PeopleTaskStatus }>(
+    product: string,
+    taskId: string,
+    getTask: () => Promise<T>,
+    options: {
+      intervalMs?: number;
+      timeoutMs?: number;
+      onProgress?: (task: T) => void;
+    }
+  ): Promise<T> {
+    const intervalMs = Math.max(0, options.intervalMs ?? 5000);
+    const timeoutMs = Math.max(0, options.timeoutMs ?? 600000);
+    const deadline = Date.now() + timeoutMs;
+
+    for (;;) {
+      const task = await getTask();
+      options.onProgress?.(task);
+      if (TASK_END_STATUSES.includes(task.status)) {
+        return task;
+      }
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `Timed out after ${timeoutMs}ms waiting for ${product} task ${taskId} (status: ${task.status})`
+        );
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(intervalMs, remaining))
+      );
+    }
   }
 
   /**
@@ -977,7 +1094,7 @@ export class Desearch {
     return this.handleRequest<PeopleTaskList>(
       'GET',
       '/desearch/people/tasks',
-      this.peopleTaskListQuery(params),
+      this.taskListQuery(params),
       options
     );
   }
@@ -1153,7 +1270,7 @@ export class Desearch {
     return this.handleRequest<string>(
       'GET',
       this.peopleTaskPath(params, '/export'),
-      this.peopleQuery(params),
+      this.taskQuery(params),
       options
     );
   }
@@ -1184,7 +1301,7 @@ export class Desearch {
     return this.handleRequest<PeopleProfilesPage>(
       'GET',
       '/desearch/people/profiles',
-      this.peopleQuery(params),
+      this.taskQuery(params),
       options
     );
   }
@@ -1215,7 +1332,7 @@ export class Desearch {
     return this.handleRequest<string>(
       'GET',
       '/desearch/people/profiles/export',
-      this.peopleQuery(params),
+      this.taskQuery(params),
       options
     );
   }
@@ -1233,27 +1350,12 @@ export class Desearch {
     params: PeopleTaskParams,
     options: WaitForPeopleTaskOptions = {}
   ): Promise<PeopleTask> {
-    const intervalMs = Math.max(0, options.intervalMs ?? 5000);
-    const timeoutMs = Math.max(0, options.timeoutMs ?? 600000);
-    const deadline = Date.now() + timeoutMs;
-
-    for (;;) {
-      const task = await this.getPeopleTask({ task_id: params.task_id });
-      options.onProgress?.(task);
-      if (PEOPLE_TASK_END_STATUSES.includes(task.status)) {
-        return task;
-      }
-
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        throw new Error(
-          `Timed out after ${timeoutMs}ms waiting for People Search task ${params.task_id} (status: ${task.status})`
-        );
-      }
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min(intervalMs, remaining))
-      );
-    }
+    return this.pollTask(
+      'People Search',
+      params.task_id,
+      () => this.getPeopleTask({ task_id: params.task_id }),
+      options
+    );
   }
 
   /**
@@ -1276,6 +1378,349 @@ export class Desearch {
       });
       yield page;
       if (!page.has_more || page.next_cursor === cursor) {
+        return;
+      }
+      cursor = page.next_cursor;
+    }
+  }
+  /**
+   * Find companies from a description and collect each one's public contact data (Company Search).
+   *
+   * Starts a background task and returns it at once (HTTP 202). The search looks for the companies' websites, reads each
+   * homepage and scores how well the company fits, then reads its contact, about, team and imprint pages for emails, phones
+   * and social profiles, finds its leaders (`roles`: CEO, founders, CTO and CFO by default) with their LinkedIn profiles,
+   * infers their emails from the company's address pattern and checks every email. Every contact keeps the page it came
+   * from (`source_url`).
+   *
+   * Billed: `count` companies are reserved at the route price and the task settles to the companies it delivers
+   * (a minimum of 2 when it delivers any; a task that delivers none is free).
+   *
+   * @param payload - The search request including query, count, min_score, exclude, roles, infer_emails, verify_emails, filters (countries, require) and metadata.
+   * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
+   * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
+   */
+  async companySearch(
+    payload: CompanySearchRequest,
+    options: DesearchMetadataRequestOptions & PeopleSearchOptions
+  ): Promise<DesearchResponse<CompanySearchTask>>;
+  async companySearch(
+    payload: CompanySearchRequest,
+    options?: DesearchDefaultRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask>;
+  async companySearch(
+    payload: CompanySearchRequest,
+    options: DesearchRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask | DesearchResponse<CompanySearchTask>>;
+  async companySearch(
+    payload: CompanySearchRequest,
+    options?: DesearchRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask | DesearchResponse<CompanySearchTask>> {
+    return this.createTask<CompanySearchTask>(
+      '/desearch/companies/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Collect public contact data for companies you already know, by domain (Company Enrich).
+   *
+   * Starts a background task and returns it at once (HTTP 202). Send up to 200 domains or URLs; each is reduced to its host
+   * without `www.`, lowercased and deduplicated, and the task's `count` is the number left. You get one company per domain,
+   * with the same fields as Company Search but no fit score (`score` is null).
+   *
+   * Billed: one company is reserved per domain you send, at the route price, and the task settles to the companies it
+   * delivers (a minimum of 1); the rest of the reservation, including duplicate domains, is returned.
+   *
+   * @param payload - The enrich request including domains, roles, infer_emails, verify_emails and metadata.
+   * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
+   * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
+   */
+  async companyEnrich(
+    payload: CompanyEnrichRequest,
+    options: DesearchMetadataRequestOptions & PeopleSearchOptions
+  ): Promise<DesearchResponse<CompanySearchTask>>;
+  async companyEnrich(
+    payload: CompanyEnrichRequest,
+    options?: DesearchDefaultRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask>;
+  async companyEnrich(
+    payload: CompanyEnrichRequest,
+    options: DesearchRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask | DesearchResponse<CompanySearchTask>>;
+  async companyEnrich(
+    payload: CompanyEnrichRequest,
+    options?: DesearchRequestOptions & PeopleSearchOptions
+  ): Promise<CompanySearchTask | DesearchResponse<CompanySearchTask>> {
+    return this.createTask<CompanySearchTask>(
+      '/desearch/companies/enrich',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * List your company's Company Search and Company Enrich tasks, newest first. People Search tasks are not listed. Free.
+   *
+   * @param params - Optional type (`search` or `enrich`), status (one status or an array, sent comma-separated), limit, cursor, and a `metadata` filter (sent as `metadata.<key>=<value>` query params; up to 3 exact-match pairs).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns A page of tasks with `next_cursor` for the next page, or a metadata wrapper when opted in.
+   */
+  async listCompanyTasks(
+    params: ListCompanyTasksParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyTaskList>>;
+  async listCompanyTasks(
+    params?: ListCompanyTasksParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyTaskList>;
+  async listCompanyTasks(
+    params: ListCompanyTasksParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyTaskList | DesearchResponse<CompanyTaskList>>;
+  async listCompanyTasks(
+    params: ListCompanyTasksParams = {},
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTaskList | DesearchResponse<CompanyTaskList>> {
+    return this.handleRequest<CompanyTaskList>(
+      'GET',
+      '/desearch/companies/tasks',
+      this.taskListQuery(params),
+      options
+    );
+  }
+
+  /**
+   * Get the status, progress, and cost of one Company Search or Company Enrich task. Free.
+   * `stage` is `enriching` once every company is published and only later stages of some of them are left.
+   *
+   * @param params - Object containing the task ID. A task object returned by `companySearch` or `companyEnrich` works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The task, or a metadata wrapper when opted in.
+   */
+  async getCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyTask>>;
+  async getCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyTask>;
+  async getCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>>;
+  async getCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>> {
+    return this.handleRequest<CompanyTask>(
+      'GET',
+      this.companyTaskPath(params),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Read one page of the companies a task delivered so far, in the order they were found. Free.
+   * They arrive while the task is still running and are filled in place by the later stages (`enrichment.status` `partial`,
+   * then `complete`): keep `next_cursor` and call again to get only new companies, or call without `cursor` to read every
+   * company in its latest version. The API answers 410 once the results have expired (30 days after the task ended).
+   *
+   * @param params - Object containing the task ID and optional cursor and limit (1-500).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns A results page with `next_cursor` and `has_more`, or a metadata wrapper when opted in.
+   */
+  async getCompanyResults(
+    params: GetCompanyResultsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyResultsPage>>;
+  async getCompanyResults(
+    params: GetCompanyResultsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyResultsPage>;
+  async getCompanyResults(
+    params: GetCompanyResultsParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyResultsPage | DesearchResponse<CompanyResultsPage>>;
+  async getCompanyResults(
+    params: GetCompanyResultsParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyResultsPage | DesearchResponse<CompanyResultsPage>> {
+    return this.handleRequest<CompanyResultsPage>(
+      'GET',
+      this.companyTaskPath(params, '/results'),
+      { cursor: params.cursor, limit: params.limit },
+      options
+    );
+  }
+
+  /**
+   * Pause a Company Search or Company Enrich task. A queued task pauses at once; a running one finishes its current batch
+   * first (status `pausing`, then `paused`). Companies delivered so far stay available. A task paused for more than 7 days
+   * is cancelled. Free.
+   *
+   * @param params - Object containing the task ID.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The task, or a metadata wrapper when opted in.
+   * @throws {CompanyTaskConflictError} When the task cannot be paused (HTTP 409); `error.task` is the current task.
+   */
+  async pauseCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyTask>>;
+  async pauseCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyTask>;
+  async pauseCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>>;
+  async pauseCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>> {
+    return this.companyTaskControl('pause', params, options);
+  }
+
+  /**
+   * Resume a paused Company Search or Company Enrich task from where it stopped. It is not charged again. Free.
+   *
+   * @param params - Object containing the task ID.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The task, or a metadata wrapper when opted in.
+   * @throws {CompanyTaskConflictError} When the task is not paused (HTTP 409); `error.task` is the current task.
+   */
+  async resumeCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyTask>>;
+  async resumeCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyTask>;
+  async resumeCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>>;
+  async resumeCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>> {
+    return this.companyTaskControl('resume', params, options);
+  }
+
+  /**
+   * Cancel a Company Search or Company Enrich task. You pay only for the companies it delivered (a task cancelled before it
+   * starts costs nothing); the rest of the reservation is returned. Companies delivered so far stay available for 30 days. Free.
+   *
+   * @param params - Object containing the task ID.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The task, or a metadata wrapper when opted in.
+   * @throws {CompanyTaskConflictError} When the task has already ended (HTTP 409); `error.task` is the current task.
+   */
+  async cancelCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<CompanyTask>>;
+  async cancelCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<CompanyTask>;
+  async cancelCompanyTask(
+    params: CompanyTaskParams,
+    options: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>>;
+  async cancelCompanyTask(
+    params: CompanyTaskParams,
+    options?: DesearchRequestOptions
+  ): Promise<CompanyTask | DesearchResponse<CompanyTask>> {
+    return this.companyTaskControl('cancel', params, options);
+  }
+
+  /**
+   * Download every company a task delivered so far as CSV or JSON Lines. Free.
+   * CSV has one row per company: its domain, name, fit score, location, primary email, emails, phones and social profiles,
+   * then the CEO (or managing director), founder, CTO and CFO with their title, email, email status and LinkedIn profile,
+   * and `fully_verified`, `unverified_criteria` and `enrichment_status`. JSON Lines has one company per line with every field.
+   * Fields the later stages have not filled in yet are empty.
+   *
+   * @param params - Object containing the task ID and optional format (csv or jsonl, default csv).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The file content as a string, or a metadata wrapper when opted in.
+   */
+  async exportCompanyResults(
+    params: ExportCompanyResultsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<string>>;
+  async exportCompanyResults(
+    params: ExportCompanyResultsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<string>;
+  async exportCompanyResults(
+    params: ExportCompanyResultsParams,
+    options: DesearchRequestOptions
+  ): Promise<string | DesearchResponse<string>>;
+  async exportCompanyResults(
+    params: ExportCompanyResultsParams,
+    options?: DesearchRequestOptions
+  ): Promise<string | DesearchResponse<string>> {
+    return this.handleRequest<string>(
+      'GET',
+      this.companyTaskPath(params, '/export'),
+      { format: params.format },
+      options
+    );
+  }
+
+  /**
+   * Poll a Company Search or Company Enrich task until it ends (completed, partial, failed, cancelled, or expired).
+   * A paused task is not ended, so waiting on one runs until the timeout. Polling is free.
+   *
+   * @param params - Object containing the task ID. A task object returned by `companySearch` or `companyEnrich` works as is.
+   * @param options - Optional poll interval (default 5000 ms), timeout (default 600000 ms), and `onProgress` callback.
+   * @returns The ended task.
+   * @throws Error when the task has not ended before the timeout, or when a poll request fails.
+   */
+  async waitForCompanyTask(
+    params: CompanyTaskParams,
+    options: WaitForCompanyTaskOptions = {}
+  ): Promise<CompanyTask> {
+    return this.pollTask(
+      'Company Search',
+      params.task_id,
+      () => this.getCompanyTask({ task_id: params.task_id }),
+      options
+    );
+  }
+
+  /**
+   * Iterate over every company a task delivered so far, following `next_cursor` page by page until `has_more` is false.
+   * Use it after `waitForCompanyTask` to read every company in its final version. On a running task, companies can still be
+   * `partial` (later stages fill them in); call `getCompanyResults` without `cursor` to read their latest version.
+   *
+   * @param params - Object containing the task ID and optional starting cursor and page size (1-500).
+   * @returns An async iterator of companies, in the order they were found.
+   */
+  async *iterCompanyResults(
+    params: GetCompanyResultsParams
+  ): AsyncGenerator<Company, void, undefined> {
+    let cursor = params.cursor ?? undefined;
+
+    for (;;) {
+      const page = await this.getCompanyResults({
+        task_id: params.task_id,
+        cursor,
+        limit: params.limit,
+      });
+      yield* page.results;
+      if (
+        !page.has_more ||
+        page.results.length === 0 ||
+        page.next_cursor === cursor
+      ) {
         return;
       }
       cursor = page.next_cursor;

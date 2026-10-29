@@ -2,11 +2,18 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetch } from 'undici';
 import Desearch, {
+  CompanyTaskConflictError,
   Desearch as DesearchNamed,
   PeopleTaskConflictError,
   unverifiedCriteria,
 } from './index';
 import type {
+  Company,
+  CompanyCompletionReason,
+  CompanyEmail,
+  CompanyRole,
+  CompanyTask,
+  CompanyTaskStage,
   PeopleCompletionReason,
   PeopleCriterionCheck,
   PeopleCriterionVerdict,
@@ -1191,6 +1198,895 @@ describe('People Search', () => {
       });
     expect(typeof typed).toBe('function');
     expect(typeof tiktok).toBe('function');
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+const COMPANY_TASK_ID = '5b33f3ee-168b-4780-9c8e-63a626781872';
+
+function companyTask(overrides: Partial<CompanyTask> = {}): CompanyTask {
+  return {
+    task_id: COMPANY_TASK_ID,
+    search_type: 'company_search',
+    platform: 'company',
+    status: 'queued',
+    stage: null,
+    query:
+      'Series A fintech startups in Berlin building payment infrastructure',
+    count: 25,
+    result_count: 0,
+    request: {
+      query:
+        'Series A fintech startups in Berlin building payment infrastructure',
+      count: 25,
+      min_score: 60,
+      exclude: ['stripe.com'],
+      roles: ['ceo', 'founder', 'cto', 'cfo'],
+      infer_emails: true,
+      verify_emails: true,
+      filters: { countries: ['DE'], require: ['email'] },
+    },
+    metadata: {},
+    interpreted: null,
+    progress: {},
+    errors: [],
+    completion_reason: null,
+    coverage_limited: false,
+    warnings: [],
+    reserved_cost_usd: 2.25,
+    final_cost_usd: null,
+    created_at: '2026-10-28T10:00:00+00:00',
+    links: {
+      self: `/desearch/companies/tasks/${COMPANY_TASK_ID}`,
+      results: `/desearch/companies/tasks/${COMPANY_TASK_ID}/results`,
+      export: `/desearch/companies/tasks/${COMPANY_TASK_ID}/export`,
+    },
+    ...overrides,
+  };
+}
+
+function enrichTask(overrides: Partial<CompanyTask> = {}): CompanyTask {
+  return companyTask({
+    search_type: 'company_enrich',
+    platform: 'company_enrich',
+    query: 'acme.com, beta.io',
+    count: 2,
+    request: {
+      domains: ['acme.com', 'beta.io'],
+      roles: ['ceo', 'cto'],
+      infer_emails: true,
+      verify_emails: true,
+    },
+    interpreted: null,
+    reserved_cost_usd: 0.1,
+    ...overrides,
+  });
+}
+
+// Modeled on the result example of the API contract (docs/company-search.md).
+function acme(): Company {
+  const hello: CompanyEmail = {
+    value: 'hello@acme.com',
+    type: 'general',
+    source: 'website',
+    source_url: 'https://acme.com/impressum',
+    on_domain: true,
+    person: null,
+    confidence: null,
+    pattern: null,
+    verification: {
+      status: 'valid',
+      checks: { syntax: true, mx: 'ok', smtp: 'skipped', web: 'skipped' },
+      checked_at: '2026-10-28T10:00:00Z',
+    },
+  };
+  return {
+    id: 'company:acme.com',
+    platform: 'company',
+    handle: 'acme.com',
+    domain: 'acme.com',
+    url: 'https://acme.com/',
+    name: 'Acme',
+    description: 'Payment infrastructure for marketplaces.',
+    logo_url: 'https://acme.com/logo.png',
+    location: {
+      country: 'DE',
+      city: 'Berlin',
+      address: 'Torstraße 1, 10119 Berlin',
+    },
+    industry: 'Fintech',
+    emails: [hello],
+    phones: [
+      {
+        value: '+493012345678',
+        type: 'main',
+        source: 'website',
+        source_url: 'https://acme.com/impressum',
+        raw: '+49 30 1234 5678',
+      },
+    ],
+    socials: [
+      {
+        type: 'linkedin',
+        url: 'https://www.linkedin.com/company/acme',
+        handle: 'acme',
+        source: 'website',
+        source_url: 'https://acme.com/',
+      },
+    ],
+    pages: [
+      { type: 'home', url: 'https://acme.com/' },
+      { type: 'imprint', url: 'https://acme.com/impressum' },
+    ],
+    people: [
+      {
+        name: 'Anna Schmidt',
+        title: 'Co-founder & CEO',
+        roles: ['ceo', 'founder'],
+        linkedin_url: 'https://www.linkedin.com/in/annaschmidt',
+        x_url: null,
+        github_url: null,
+        emails: [
+          {
+            value: 'anna.schmidt@acme.com',
+            type: 'personal',
+            source: 'inferred',
+            source_url: null,
+            on_domain: true,
+            person: 'Anna Schmidt',
+            confidence: 'high',
+            pattern: 'first.last',
+            verification: {
+              status: 'valid',
+              checks: {
+                syntax: true,
+                mx: 'ok',
+                smtp: 'accepted',
+                web: 'not_found',
+              },
+              checked_at: '2026-10-28T10:02:00Z',
+            },
+          },
+        ],
+        phones: [],
+        evidence: {
+          quote: 'Anna Schmidt, Geschäftsführerin',
+          source_url: 'https://acme.com/impressum',
+          source: 'website',
+        },
+        verified: true,
+      },
+    ],
+    primary_email: hello,
+    primary_contact: {
+      name: 'Anna Schmidt',
+      title: 'Co-founder & CEO',
+      email: 'anna.schmidt@acme.com',
+      linkedin_url: 'https://www.linkedin.com/in/annaschmidt',
+      reason: "CEO, email inferred from the company's pattern and verified",
+    },
+    contact_coverage: {
+      email: true,
+      phone: true,
+      linkedin: true,
+      leader: true,
+      leader_email: true,
+    },
+    enrichment: {
+      status: 'complete',
+      stages: {
+        profile: 'done',
+        contacts: 'done',
+        people: 'done',
+        email_patterns: 'done',
+        email_check: 'done',
+      },
+      errors: [],
+    },
+    score: {
+      value: 86,
+      qualified: true,
+      relevance: 'high',
+      summary: 'Berlin payments infrastructure startup, Series A in 2025.',
+      matched_signals: ['payment infrastructure', 'Berlin'],
+      reasons: ['Builds payment APIs for marketplaces'],
+      concerns: ['Funding stage not on its own site'],
+      criteria_checks: [
+        {
+          criterion: 'Profile fit: payment infrastructure company',
+          verdict: 'met',
+          quote: 'Payment infrastructure for marketplaces.',
+          source_url: 'https://acme.com/',
+          reason: 'The homepage says so.',
+          is_disqualifier: false,
+        },
+        {
+          criterion: 'Stage: Series A',
+          verdict: 'unknown',
+          quote: null,
+          source_url: null,
+          reason: 'No funding round on its pages.',
+          is_disqualifier: false,
+        },
+      ],
+      fully_verified: false,
+    },
+    found_by: [
+      {
+        query: 'fintech payment infrastructure startup Berlin',
+        url: 'https://acme.com/',
+        title: 'Acme — Payments',
+        kind: 'direct',
+      },
+    ],
+  };
+}
+
+function resultsPage(results: Company[], overrides: object = {}) {
+  return {
+    task_id: COMPANY_TASK_ID,
+    status: 'completed',
+    results,
+    next_cursor: String(results.length),
+    has_more: false,
+    ...overrides,
+  };
+}
+
+describe('Company Search', () => {
+  const API = 'https://api.desearch.ai';
+
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('starts a Company Search with the Idempotency-Key header and returns the task with its reserved cost', async () => {
+    const created = {
+      ...companyTask({ metadata: { campaign: 'q4' } }),
+      cost_usd: 2.25,
+      usage_count: 25,
+      service: 'company',
+      currency: 'USD',
+    };
+    mockResponse({ body: created, status: 202 });
+
+    const client = new Desearch('test-key');
+    const payload = {
+      query:
+        'Series A fintech startups in Berlin building payment infrastructure',
+      count: 25,
+      min_score: 60,
+      exclude: ['stripe.com'],
+      roles: ['ceo', 'founder', 'cto', 'cfo'] as CompanyRole[],
+      infer_emails: true,
+      verify_emails: true,
+      filters: {
+        countries: ['DE'],
+        require: ['email' as const],
+      },
+      metadata: { campaign: 'q4' },
+    };
+    const task = await client.companySearch(payload, {
+      idempotencyKey: 'run-42',
+    });
+    expect(task).toEqual(created);
+    expect(task.search_type).toBe('company_search');
+    expect(task.cost_usd).toBe(2.25);
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/companies/search`);
+    expect(call.method).toBe('POST');
+    expect(call.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'run-42',
+    });
+    expect(JSON.parse(call.body!)).toEqual(payload);
+  });
+
+  it('starts a Company Enrich without an Idempotency-Key by default and sends only the fields given', async () => {
+    const created = enrichTask();
+    mockResponse({ body: created, status: 202 });
+
+    const client = new Desearch('test-key');
+    const task = await client.companyEnrich({
+      domains: ['acme.com', 'https://www.beta.io/about'],
+      roles: ['ceo', 'cto'],
+    });
+    expect(task).toEqual(created);
+    expect(task.platform).toBe('company_enrich');
+    expect(task.query).toBe('acme.com, beta.io');
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/companies/enrich`);
+    expect(call.method).toBe('POST');
+    expect(call.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(call.body!)).toEqual({
+      domains: ['acme.com', 'https://www.beta.io/about'],
+      roles: ['ceo', 'cto'],
+    });
+  });
+
+  it('returns create cost metadata from headers when opted in, alongside the Idempotency-Key', async () => {
+    const created = enrichTask();
+    mockResponse({
+      body: created,
+      status: 202,
+      headers: {
+        'X-Desearch-Cost-Usd': '0.1',
+        'X-Desearch-Usage-Count': '2',
+        'X-Desearch-Service': 'company_enrich',
+        'X-Desearch-Currency': 'USD',
+      },
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.companyEnrich(
+        { domains: ['acme.com', 'beta.io'], metadata: { campaign: 'q4' } },
+        { includeMetadata: true, idempotencyKey: 'run-43' }
+      )
+    ).resolves.toEqual({
+      data: created,
+      metadata: {
+        costUsd: 0.1,
+        usageCount: 2,
+        service: 'company_enrich',
+        currency: 'USD',
+      },
+    });
+    expect(fetchCall(0).headers['Idempotency-Key']).toBe('run-43');
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      domains: ['acme.com', 'beta.io'],
+      metadata: { campaign: 'q4' },
+    });
+  });
+
+  it('surfaces a failed create as the standard HTTP error', async () => {
+    mockResponse({
+      body: '{"detail":"Company Search needs account credits."}',
+      ok: false,
+      status: 402,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.companySearch({ query: 'fintech startups in Berlin' })
+    ).rejects.toThrow(
+      'HTTP 402: {"detail":"Company Search needs account credits."}'
+    );
+  });
+
+  it('lists tasks with type, a comma-separated status list, limit, cursor and metadata.<key>=<value> filters', async () => {
+    const list = {
+      tasks: [enrichTask({ metadata: { campaign: 'q4 outbound & more' } })],
+      next_cursor: 'abc',
+    };
+    mockResponse({ body: list });
+    mockResponse({ body: { tasks: [], next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listCompanyTasks({
+        type: 'enrich',
+        status: ['running', 'paused'],
+        limit: 10,
+        cursor: 'xyz',
+        metadata: { campaign: 'q4 outbound & more', 'team.id': 't-1' },
+      })
+    ).resolves.toEqual(list);
+    await client.listCompanyTasks();
+
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/companies/tasks?type=enrich&status=running%2Cpaused&limit=10&cursor=xyz&metadata.campaign=q4+outbound+%26+more&metadata.team.id=t-1`
+    );
+    expect(fetchCall(0).method).toBe('GET');
+    const params = new URL(fetchCall(0).url).searchParams;
+    expect(params.get('metadata.campaign')).toBe('q4 outbound & more');
+    expect(params.has('metadata')).toBe(false);
+    expect(fetchCall(1).url).toBe(`${API}/desearch/companies/tasks`);
+  });
+
+  it('gets one task by id with its stage, completion reason and warnings', async () => {
+    const enriching = companyTask({
+      status: 'running',
+      stage: 'enriching',
+      result_count: 25,
+      progress: {
+        candidates_found: 140,
+        candidates_processed: 60,
+        qualified: 25,
+        filtered: { unreachable: 4, not_a_company: 9, no_email: 5 },
+        enrichment: { published: 25, complete: 18, pending: 7, failed: 0 },
+      },
+      warnings: [
+        {
+          code: 'linkedin_verification_unavailable',
+          message:
+            'Leaders found through LinkedIn search could not be checked.',
+        },
+      ],
+    });
+    const done = enrichTask({
+      status: 'completed',
+      result_count: 2,
+      completion_reason: 'all_domains_processed',
+      final_cost_usd: 0.1,
+    });
+    mockResponse({ body: enriching });
+    mockResponse({ body: done });
+
+    const client = new Desearch('test-key');
+    const task = await client.getCompanyTask({ task_id: COMPANY_TASK_ID });
+    expect(task).toEqual(enriching);
+    expect(task.stage).toBe('enriching');
+    expect(task.warnings?.[0].code).toBe('linkedin_verification_unavailable');
+    expect(task.completion_reason).toBeNull();
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/companies/tasks/${COMPANY_TASK_ID}`);
+    expect(call.method).toBe('GET');
+    expect(call.body).toBeUndefined();
+    expect(call.headers).toEqual({ Authorization: 'test-key' });
+
+    const ended = await client.getCompanyTask(enrichTask());
+    expect(ended.completion_reason).toBe('all_domains_processed');
+    expect(ended.coverage_limited).toBe(false);
+  });
+
+  it('reads a results page with cursor and limit and parses the full company', async () => {
+    const page = resultsPage([acme()], { next_cursor: '7', has_more: true });
+    mockResponse({ body: page });
+
+    const client = new Desearch('test-key');
+    const read = await client.getCompanyResults({
+      task_id: COMPANY_TASK_ID,
+      cursor: '6',
+      limit: 50,
+    });
+    expect(read).toEqual(page);
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results?cursor=6&limit=50`
+    );
+
+    const [company] = read.results;
+    expect(company.domain).toBe('acme.com');
+    expect(company.location?.city).toBe('Berlin');
+    expect(company.primary_email?.value).toBe('hello@acme.com');
+    expect(company.primary_email?.verification?.checks?.mx).toBe('ok');
+    expect(company.phones[0].value).toBe('+493012345678');
+    expect(company.socials.map((social) => social.type)).toEqual(['linkedin']);
+    expect(company.pages.map((page) => page.type)).toEqual(['home', 'imprint']);
+
+    const [ceo] = company.people;
+    expect(ceo.roles).toEqual(['ceo', 'founder']);
+    expect(ceo.verified).toBe(true);
+    expect(ceo.evidence?.quote).toBe('Anna Schmidt, Geschäftsführerin');
+    const [inferred] = ceo.emails;
+    expect(inferred.source).toBe('inferred');
+    expect(inferred.confidence).toBe('high');
+    expect(inferred.pattern).toBe('first.last');
+    expect(inferred.verification?.status).toBe('valid');
+    expect(inferred.verification?.checks?.smtp).toBe('accepted');
+
+    expect(company.primary_contact?.email).toBe('anna.schmidt@acme.com');
+    expect(company.contact_coverage?.leader_email).toBe(true);
+    expect(company.enrichment?.status).toBe('complete');
+    expect(company.enrichment?.stages?.email_check).toBe('done');
+    expect(company.score?.value).toBe(86);
+    expect(company.score?.relevance).toBe('high');
+    expect(company.score?.fully_verified).toBe(false);
+    expect(company.found_by[0].kind).toBe('direct');
+    expect(
+      unverifiedCriteria(company.score).map((check) => check.criterion)
+    ).toEqual(['Stage: Series A']);
+  });
+
+  it('reads a Company Enrich result without a score', async () => {
+    const enriched: Company = {
+      ...acme(),
+      score: null,
+      found_by: [
+        { query: 'acme.com', url: 'https://acme.com/', kind: 'domain' },
+      ],
+    };
+    mockResponse({ body: resultsPage([enriched]) });
+
+    const client = new Desearch('test-key');
+    const [company] = (
+      await client.getCompanyResults({ task_id: COMPANY_TASK_ID })
+    ).results;
+    expect(company.score).toBeNull();
+    expect(unverifiedCriteria(company.score)).toEqual([]);
+    expect(company.found_by[0].kind).toBe('domain');
+    expect(company.people[0].name).toBe('Anna Schmidt');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results`
+    );
+  });
+
+  it('reads a partial company that later stages have not filled in yet', async () => {
+    const partial: Company = {
+      id: 'company:beta.io',
+      platform: 'company',
+      handle: 'beta.io',
+      domain: 'beta.io',
+      url: 'https://beta.io/',
+      name: 'Beta',
+      description: null,
+      logo_url: null,
+      location: null,
+      industry: null,
+      emails: [
+        {
+          value: 'info@beta.io',
+          type: 'general',
+          source: 'website',
+          source_url: 'https://beta.io/',
+          on_domain: true,
+          verification: null,
+        },
+      ],
+      phones: [],
+      socials: [],
+      pages: [{ type: 'home', url: 'https://beta.io/' }],
+      people: [],
+      primary_email: null,
+      primary_contact: null,
+      contact_coverage: {
+        email: false,
+        phone: false,
+        linkedin: false,
+        leader: false,
+        leader_email: false,
+      },
+      enrichment: {
+        status: 'partial',
+        stages: {
+          profile: 'done',
+          contacts: 'pending',
+          people: 'pending',
+          email_patterns: 'pending',
+          email_check: 'pending',
+        },
+        errors: [],
+      },
+      score: null,
+      found_by: [],
+      // A field a newer worker adds is kept as is.
+      tech_stack: ['stripe'],
+    };
+    const failed: Company = {
+      ...partial,
+      id: 'company:gamma.dev',
+      handle: 'gamma.dev',
+      domain: 'gamma.dev',
+      enrichment: {
+        status: 'complete',
+        stages: {
+          profile: 'done',
+          contacts: 'failed',
+          people: 'done',
+          email_patterns: 'skipped',
+          email_check: 'skipped',
+        },
+        errors: [{ stage: 'contacts', message: 'timeout' }],
+      },
+    };
+    mockResponse({
+      body: resultsPage([partial, failed], { status: 'running' }),
+    });
+
+    const client = new Desearch('test-key');
+    const { status, results } = await client.getCompanyResults({
+      task_id: COMPANY_TASK_ID,
+    });
+    expect(status).toBe('running');
+    expect(results[0].enrichment?.status).toBe('partial');
+    expect(results[0].enrichment?.stages?.people).toBe('pending');
+    expect(results[0].emails[0].verification).toBeNull();
+    expect(results[0].primary_email).toBeNull();
+    expect(results[0].tech_stack).toEqual(['stripe']);
+    expect(results[1].enrichment?.errors).toEqual([
+      { stage: 'contacts', message: 'timeout' },
+    ]);
+  });
+
+  it.each([
+    ['pauseCompanyTask', 'pause', 'paused'],
+    ['resumeCompanyTask', 'resume', 'queued'],
+    ['cancelCompanyTask', 'cancel', 'cancelled'],
+  ] as const)(
+    '%s posts to the %s route without a body',
+    async (method, action, status) => {
+      const task = companyTask({ status });
+      mockResponse({ body: task });
+
+      const client = new Desearch('test-key');
+      await expect(
+        client[method]({ task_id: COMPANY_TASK_ID })
+      ).resolves.toEqual(task);
+
+      const call = fetchCall(0);
+      expect(call.url).toBe(
+        `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/${action}`
+      );
+      expect(call.method).toBe('POST');
+      expect(call.body).toBeUndefined();
+      expect(call.headers).toEqual({ Authorization: 'test-key' });
+    }
+  );
+
+  it('throws CompanyTaskConflictError with the current task when a control action is refused (409)', async () => {
+    const current = enrichTask({ status: 'completed' });
+    const body = JSON.stringify({
+      detail: 'This task has already ended.',
+      task: current,
+    });
+    mockResponse({ body, ok: false, status: 409 });
+
+    const client = new Desearch('test-key');
+    const error = await client
+      .cancelCompanyTask({ task_id: COMPANY_TASK_ID })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(CompanyTaskConflictError);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(PeopleTaskConflictError);
+    const conflict = error as CompanyTaskConflictError;
+    expect(conflict.name).toBe('CompanyTaskConflictError');
+    expect(conflict.status).toBe(409);
+    expect(conflict.detail).toBe('This task has already ended.');
+    expect(conflict.task).toEqual(current);
+    expect(conflict.task.platform).toBe('company_enrich');
+    expect(conflict.message).toBe(`HTTP 409: ${body}`);
+  });
+
+  it('keeps the plain HTTP error for other control failures', async () => {
+    mockResponse({
+      body: '{"detail":"Task not found"}',
+      ok: false,
+      status: 404,
+    });
+    mockResponse({ body: 'not json', ok: false, status: 409 });
+
+    const client = new Desearch('test-key');
+    const notFound = await client
+      .pauseCompanyTask({ task_id: COMPANY_TASK_ID })
+      .catch((caught: unknown) => caught);
+    expect(notFound).not.toBeInstanceOf(CompanyTaskConflictError);
+    expect((notFound as Error).message).toBe(
+      'HTTP 404: {"detail":"Task not found"}'
+    );
+
+    const unparsable = await client
+      .resumeCompanyTask({ task_id: COMPANY_TASK_ID })
+      .catch((caught: unknown) => caught);
+    expect(unparsable).not.toBeInstanceOf(CompanyTaskConflictError);
+    expect((unparsable as Error).message).toBe('HTTP 409: not json');
+  });
+
+  it('exports results as CSV by default and as JSON Lines text', async () => {
+    const csv = 'domain,name,url,score\nacme.com,Acme,https://acme.com/,86\n';
+    const jsonl = `${JSON.stringify(acme())}\n`;
+    mockResponse({ body: csv, contentType: 'text/csv; charset=utf-8' });
+    mockResponse({ body: jsonl, contentType: 'application/x-ndjson' });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.exportCompanyResults({ task_id: COMPANY_TASK_ID })
+    ).resolves.toBe(csv);
+    await expect(
+      client.exportCompanyResults({
+        ...companyTask({ status: 'completed' }),
+        format: 'jsonl',
+      })
+    ).resolves.toBe(jsonl);
+
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/export`
+    );
+    // A whole task object works: only format goes in the query.
+    expect(fetchCall(1).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/export?format=jsonl`
+    );
+    expect(fetchCall(1).method).toBe('GET');
+  });
+
+  it('surfaces expired results as the standard HTTP error', async () => {
+    mockResponse({
+      body: '{"detail":"Results expired 30 days after the task ended"}',
+      ok: false,
+      status: 410,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.getCompanyResults({ task_id: COMPANY_TASK_ID })
+    ).rejects.toThrow(
+      'HTTP 410: {"detail":"Results expired 30 days after the task ended"}'
+    );
+  });
+
+  it('waits for a task to end, reporting every poll through the enriching stage', async () => {
+    mockResponse({ body: companyTask({ status: 'queued' }) });
+    mockResponse({
+      body: companyTask({
+        status: 'running',
+        stage: 'enriching',
+        result_count: 25,
+      }),
+    });
+    const done = companyTask({
+      status: 'completed',
+      stage: null,
+      result_count: 25,
+      completion_reason: 'count_reached',
+      final_cost_usd: 2.25,
+    });
+    mockResponse({ body: done });
+
+    const client = new Desearch('test-key');
+    const seen: string[] = [];
+    await expect(
+      client.waitForCompanyTask(companyTask(), {
+        intervalMs: 0,
+        onProgress: (task) => seen.push(`${task.status}:${task.stage}`),
+      })
+    ).resolves.toEqual(done);
+
+    expect(seen).toEqual([
+      'queued:null',
+      'running:enriching',
+      'completed:null',
+    ]);
+    expect(mockedFetch).toHaveBeenCalledTimes(3);
+    expect(fetchCall(2).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}`
+    );
+  });
+
+  it.each(['partial', 'failed', 'cancelled', 'expired'] as const)(
+    'stops waiting on %s',
+    async (status) => {
+      mockResponse({ body: enrichTask({ status }) });
+
+      const client = new Desearch('test-key');
+      await expect(
+        client.waitForCompanyTask({ task_id: COMPANY_TASK_ID })
+      ).resolves.toMatchObject({ status });
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('polls on the interval and times out when the task does not end', async () => {
+    vi.useFakeTimers();
+    for (let i = 0; i < 4; i += 1) {
+      mockResponse({ body: companyTask({ status: 'paused' }) });
+    }
+
+    const client = new Desearch('test-key');
+    const waiting = client.waitForCompanyTask(
+      { task_id: COMPANY_TASK_ID },
+      { intervalMs: 1000, timeoutMs: 2500 }
+    );
+    const assertion = expect(waiting).rejects.toThrow(
+      `Timed out after 2500ms waiting for Company Search task ${COMPANY_TASK_ID} (status: paused)`
+    );
+    await vi.advanceTimersByTimeAsync(3000);
+    await assertion;
+
+    // Polls at 0, 1000, 2000 and a last one at the 2500 ms deadline.
+    expect(mockedFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('iterates over every company by following next_cursor', async () => {
+    const company = (domain: string): Company => ({
+      ...acme(),
+      id: `company:${domain}`,
+      handle: domain,
+      domain,
+    });
+    const pages = [
+      resultsPage([company('a.com'), company('b.com')], {
+        next_cursor: '2',
+        has_more: true,
+      }),
+      resultsPage([company('c.com'), company('d.com')], {
+        next_cursor: '4',
+        has_more: true,
+      }),
+      resultsPage([company('e.com')], { next_cursor: '5', has_more: false }),
+    ];
+    for (const page of pages) {
+      mockResponse({ body: page });
+    }
+
+    const client = new Desearch('test-key');
+    const domains: string[] = [];
+    // A whole task object works: only cursor and limit go in the query.
+    for await (const result of client.iterCompanyResults({
+      ...companyTask({ status: 'completed' }),
+      limit: 2,
+    })) {
+      domains.push(result.domain);
+    }
+
+    expect(domains).toEqual(['a.com', 'b.com', 'c.com', 'd.com', 'e.com']);
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results?limit=2`,
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results?cursor=2&limit=2`,
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results?cursor=4&limit=2`,
+    ]);
+  });
+
+  it('starts iterating from a saved cursor and stops on a page without new companies', async () => {
+    mockResponse({
+      body: resultsPage([], {
+        status: 'running',
+        next_cursor: '5',
+        has_more: true,
+      }),
+    });
+
+    const client = new Desearch('test-key');
+    const companies: Company[] = [];
+    for await (const company of client.iterCompanyResults({
+      task_id: COMPANY_TASK_ID,
+      cursor: '5',
+    })) {
+      companies.push(company);
+    }
+
+    expect(companies).toEqual([]);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/companies/tasks/${COMPANY_TASK_ID}/results?cursor=5`
+    );
+  });
+
+  it('types the requests and results to the values the API documents', () => {
+    const client = new Desearch('test-key');
+    // Type-only checks: compiled by `tsc --noEmit`; these calls are never awaited or sent.
+    const badRole = () =>
+      client.companyEnrich({
+        domains: ['acme.com'],
+        // @ts-expect-error vp is not a leader role
+        roles: ['vp'],
+      });
+    const badRequirement = () =>
+      client.companySearch({
+        query: 'fintech startups',
+        // @ts-expect-error fax is not a requirement
+        filters: { require: ['fax'] },
+      });
+    // @ts-expect-error type is search or enrich
+    const badType = () => client.listCompanyTasks({ type: 'people' });
+    const reason: CompanyCompletionReason = 'all_domains_processed';
+    // @ts-expect-error domains_done is a worker stop_reason, not a completion reason
+    const internal: CompanyCompletionReason = 'domains_done';
+    const stage: CompanyTaskStage = 'enriching';
+    const email: CompanyEmail = {
+      value: 'anna@acme.com',
+      // @ts-expect-error verification status is valid, invalid, risky or unknown
+      verification: { status: 'deliverable' },
+    };
+    expect([
+      badRole,
+      badRequirement,
+      badType,
+      reason,
+      internal,
+      stage,
+      email,
+    ]).toHaveLength(7);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

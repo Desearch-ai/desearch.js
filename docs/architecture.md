@@ -22,13 +22,14 @@ This file contains:
 - the shared private `handleRequest<T>()` helper
 - response metadata parsing helpers for optional cost/usage visibility
 - all public SDK methods
-- `PeopleTaskConflictError`, the error class thrown when a People Search task action is refused
+- `PeopleTaskConflictError` and `CompanyTaskConflictError`, the error classes thrown when a People Search or company task action is refused
 
-Those public methods fall into four groups:
+Those public methods fall into five groups:
 - AI search methods
 - X or Twitter methods
 - web methods
 - People Search methods and helpers
+- Company Search and Company Enrich methods and helpers
 
 ### `src/types.ts`
 
@@ -88,7 +89,7 @@ private async handleRequest<T>(
 ): Promise<T | DesearchResponse<T>>
 ```
 
-`config` is internal. People Search uses it to add an `Idempotency-Key` header and to build `PeopleTaskConflictError` from a 409 response.
+`config` is internal. People Search and Company Search use it to add an `Idempotency-Key` header and to build `PeopleTaskConflictError` or `CompanyTaskConflictError` from a 409 response.
 
 That helper owns the full transport flow.
 
@@ -112,7 +113,7 @@ For POST requests with a payload, the helper also adds:
 { 'Content-Type': 'application/json' }
 ```
 
-People Search create calls add `Idempotency-Key` when the caller passes `idempotencyKey`. Extra headers can never replace `Authorization`.
+People Search and company create calls add `Idempotency-Key` when the caller passes `idempotencyKey`. Extra headers can never replace `Authorization`.
 
 ### 3. GET serialization
 
@@ -177,11 +178,11 @@ The helper uses two error paths:
 - HTTP failures become `Error('HTTP <status>: <body>')`
 - everything else becomes `Error('Unexpected Error: <message>')`
 
-A method can pass its own error builder in `config`. The only one today is for People Search pause, resume and cancel. When one of those calls returns 409 with `{ detail, task }`, the helper throws a `PeopleTaskConflictError`. That error keeps the `HTTP 409: <body>` message and adds `status`, `detail` and `task`.
+A method can pass its own error builder in `config`. The only ones today are for pause, resume and cancel. When one of those calls returns 409 with `{ detail, task }`, the helper throws a `PeopleTaskConflictError` (People Search) or a `CompanyTaskConflictError` (Company Search and Company Enrich). Both keep the `HTTP 409: <body>` message and add `status`, `detail` and `task`. They are separate classes, so `instanceof` tells the two products apart.
 
 Why this matters:
 - callers get a consistent thrown message shape
-- apart from `PeopleTaskConflictError`, callers do not get typed SDK error classes or structured error instances
+- apart from the two task conflict errors, callers do not get typed SDK error classes or structured error instances
 
 ## Method groups
 
@@ -247,6 +248,25 @@ Transport details:
 Two helpers build on these methods without changing the transport:
 - `waitForPeopleTask` calls `getPeopleTask` until the status is `completed`, `partial`, `failed`, `cancelled` or `expired`. It waits `intervalMs` between polls, throws once `timeoutMs` has passed, and calls `onProgress` after every poll.
 - `iterPeopleResultPages` is an async generator. It calls `getPeopleResults` and follows `next_cursor` until `has_more` is false.
+
+### Company Search methods
+
+Company Search and Company Enrich run on the People Search engine as background tasks, under their own routes:
+- `companySearch` (`POST /desearch/companies/search`) and `companyEnrich` (`POST /desearch/companies/enrich`) POST a JSON body and return the created task (HTTP 202; 200 when an `Idempotency-Key` replays an earlier task). These are the only billed company calls.
+- `listCompanyTasks`, `getCompanyTask`, `getCompanyResults` and `exportCompanyResults` are free GET calls under `/desearch/companies/tasks`.
+- `pauseCompanyTask`, `resumeCompanyTask` and `cancelCompanyTask` are free POST calls with no body.
+
+The API keeps the two products apart: a People Search task ID is a 404 on the company routes, and a company task ID is a 404 on the People Search routes. The SDK sends each method to its own routes and does not translate between them.
+
+Transport details are the same as People Search: `task_id` is URL-encoded into the path, `status` arrays are joined with commas, the `metadata` filter is flattened to `metadata.<key>=<value>` parameters, and the export returns CSV or JSON Lines as text. `listCompanyTasks` adds a `type` parameter (`search` or `enrich`). The private helpers for task paths, list queries, idempotent creates, 409 parsing and polling are shared by both products.
+
+Results fill in over time. Each company goes through the stages `profile`, `contacts`, `people`, `email_patterns` and `email_check`, and is published once the stages its request needs have run, with `enrichment.status` `partial`. The later stages then update that company in place. `next_cursor` only moves past companies already delivered, so reading again without `cursor` returns every company in its latest version.
+
+Two helpers build on these methods:
+- `waitForCompanyTask` polls `getCompanyTask` with the same end statuses, interval, timeout and `onProgress` as `waitForPeopleTask`. A task in stage `enriching` is still `running`, so the wait goes on until the later stages are done.
+- `iterCompanyResults` is an async generator over the companies themselves, not pages. It calls `getCompanyResults` and follows `next_cursor` until `has_more` is false or a page has no new companies. Unlike `iterPeopleResultPages` it does not hand out the cursor; callers that keep `next_cursor` to read only new companies later call `getCompanyResults` themselves.
+
+Types reuse the People Search ones where the API does: task statuses (`PeopleTaskStatus`), links, `created_by`, the export format, the create options (`PeopleSearchOptions`) and the criteria checks of `CompanyScore` (`PeopleCriterionCheck`). The result interfaces (`Company` and its nested objects) have an index signature, like `PersonMetrics` and `PersonAttributes`, because the API allows a newer worker to add fields.
 
 ## Type-system design
 

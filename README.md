@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.10.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.11.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -22,12 +22,13 @@ What it covers today:
 - web search
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
+- Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
 
 What it does not try to be:
 - a browser-first SDK
 - a configurable transport layer
-- a general write or mutation client (People Search tasks are the only things it creates or changes)
-- a framework with retries or runtime validation (People Search adds a small polling helper and a results-page iterator)
+- a general write or mutation client (People Search and company tasks are the only things it creates or changes)
+- a framework with retries or runtime validation (People Search and Company Search add small polling helpers and result iterators)
 
 ## Quick Start
 
@@ -126,6 +127,22 @@ The SDK sends that value as the `Authorization` header on every request.
 - `iterPeopleResultPages(params)` is an async iterator over `getPeopleResults` pages
 
 See [People Search](#people-search) for the full flow.
+
+### Company Search methods
+
+- `companySearch(payload, options?)` → `POST /desearch/companies/search` (billed)
+- `companyEnrich(payload, options?)` → `POST /desearch/companies/enrich` (billed)
+- `listCompanyTasks(params?)` → `GET /desearch/companies/tasks`
+- `getCompanyTask(params)` → `GET /desearch/companies/tasks/{task_id}`
+- `getCompanyResults(params)` → `GET /desearch/companies/tasks/{task_id}/results`
+- `pauseCompanyTask(params)` → `POST /desearch/companies/tasks/{task_id}/pause`
+- `resumeCompanyTask(params)` → `POST /desearch/companies/tasks/{task_id}/resume`
+- `cancelCompanyTask(params)` → `POST /desearch/companies/tasks/{task_id}/cancel`
+- `exportCompanyResults(params)` → `GET /desearch/companies/tasks/{task_id}/export`
+- `waitForCompanyTask(params, options?)` polls `getCompanyTask` until the task ends
+- `iterCompanyResults(params)` is an async iterator over the companies of `getCompanyResults` pages
+
+See [Company Search and Company Enrich](#company-search-and-company-enrich) for the full flow.
 
 ## Usage examples
 
@@ -446,6 +463,205 @@ const allCreators = await client.exportPeopleProfiles({
 
 The profiles library lists everyone your searches on one platform found, one entry per person, together with the search that found them (`found_by`). Results and profiles stay available for 30 days after a search ends.
 
+## Company Search and Company Enrich
+
+Company Search finds companies on the web from a description and scores how well each one fits. Company Enrich starts from domains you already have. Both collect each company's public contact data: emails, phones, social profiles, and its leaders (CEO, founders, CTO, CFO by default) with their LinkedIn profiles and emails. Every contact keeps the page it came from (`source_url`).
+
+Both run as background tasks on the People Search engine, so the flow is the same: the create call returns a queued task at once, you poll it, read the companies and export them as CSV or JSON Lines. They have their own routes under `/desearch/companies`. A People Search task ID is a 404 there, and the other way round.
+
+| | Company Search | Company Enrich |
+| --- | --- | --- |
+| Method | `companySearch` | `companyEnrich` |
+| Input | a description (`query`) | 1-200 domains or URLs (`domains`) |
+| `search_type` / `platform` on the task | `company_search` / `company` | `company_enrich` / `company_enrich` |
+| Fit score | yes (`score`) | no (`score` is null) |
+
+### End-to-end example
+
+```ts
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import Desearch from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
+
+// 1. Start the search. This is the only billed call.
+const task = await client.companySearch(
+  {
+    query: 'Series A fintech startups in Berlin building payment infrastructure',
+    count: 25,
+    min_score: 60,
+    exclude: ['stripe.com'],
+    roles: ['ceo', 'founder', 'cto', 'cfo'],
+    filters: { countries: ['DE'], require: ['email'] },
+    metadata: { campaign: 'q4' },
+  },
+  { idempotencyKey: randomUUID() },
+);
+console.log(task.task_id, task.status, task.reserved_cost_usd);
+
+// 2. Wait until it ends. Polling is free. `stage` is `enriching` once every
+//    company is published and only the later stages of some are left.
+const done = await client.waitForCompanyTask(task, {
+  intervalMs: 5000,
+  timeoutMs: 15 * 60 * 1000,
+  onProgress: (t) => console.log(t.status, t.stage, `${t.result_count}/${t.count}`),
+});
+console.log(done.status, done.completion_reason, done.final_cost_usd);
+
+// 3. Read every company.
+for await (const company of client.iterCompanyResults({ task_id: task.task_id })) {
+  console.log(
+    company.domain,
+    company.score?.value,
+    company.primary_email?.value,
+    company.people.map((person) => `${person.name} (${person.roles.join('/')})`),
+  );
+}
+
+// 4. Export as CSV: one row per company, with its CEO, founder, CTO and CFO.
+const csv = await client.exportCompanyResults({ task_id: task.task_id, format: 'csv' });
+writeFileSync(`companies-${task.task_id}.csv`, csv);
+```
+
+Company Search takes `query` (3-1000 characters), `count` (5-200, default 25), `min_score` (0-100), `exclude` (domains or URLs, up to 1000), `roles`, `infer_emails`, `verify_emails`, `filters` and `metadata`:
+
+- `roles`: any of `ceo`, `founder`, `cto`, `cfo`, `coo`, `cmo`, `president`, `owner`, `managing_director`. The default is `['ceo', 'founder', 'cto', 'cfo']`. A managing director (Geschäftsführer) counts as `ceo` when `ceo` is asked for.
+- `infer_emails` (default true) guesses leaders' emails from the company's address pattern, such as `first.last`. `verify_emails` (default true) checks every email.
+- `filters.countries` takes ISO 3166-1 alpha-2 codes or names (up to 20). `filters.require` takes `email`, `phone`, `linkedin`, `leader` and `leader_email`: a company that does not have them is not delivered and not billed.
+
+### Company Enrich
+
+```ts
+const task = await client.companyEnrich({
+  domains: ['acme.com', 'https://www.beta.io/about'],
+  roles: ['ceo', 'cto'],
+});
+console.log(task.query, task.count); // 'acme.com, beta.io', 2
+
+await client.waitForCompanyTask(task);
+for await (const company of client.iterCompanyResults({ task_id: task.task_id })) {
+  console.log(company.domain, company.score); // score is null for Company Enrich
+}
+```
+
+The API reduces each domain or URL to its host without `www.`, lowercases it and removes duplicates. `task.count` is the number left. `task.query` is a short label of the domains, such as `acme.com, beta.io and 3 more`. `task.request` keeps the normalized request of both products.
+
+### How results fill in
+
+Each company goes through five stages: `profile` (its homepage, and the fit score for Company Search), `contacts` (its contact, about, team and imprint pages), `people` (its leaders), `email_patterns` (inferred emails) and `email_check`. A company is published as soon as the stages its request needs have run:
+
+| `filters.require` contains | Published after |
+| --- | --- |
+| nothing | `profile` |
+| `email`, `phone`, `linkedin` | `contacts` |
+| `leader` | `people` |
+| `leader_email` | `email_check` |
+
+While any stage is `pending`, the company has `enrichment.status` `partial`; `enrichment.stages` shows `pending`, `done`, `failed` or `skipped` for each stage (a stage cut by the time limit is `skipped`). The later stages fill the company in place while you read. Keep `next_cursor` from `getCompanyResults` to get only new companies, and call it again without `cursor` to get the latest version of the ones you have:
+
+```ts
+let lastCursor: string | undefined;
+
+// While the task runs: new companies since the last read...
+const page = await client.getCompanyResults({ task_id: task.task_id, cursor: lastCursor });
+lastCursor = page.next_cursor;
+
+// ...and every company in its latest version.
+const latest = await client.getCompanyResults({ task_id: task.task_id, limit: 500 });
+const pending = latest.results.filter((c) => c.enrichment?.status === 'partial');
+```
+
+`iterCompanyResults` yields each company once, as it was when its page was read. Call it after `waitForCompanyTask` to get every company complete.
+
+### Reading a company
+
+```ts
+import { unverifiedCriteria } from 'desearch-js';
+
+for await (const company of client.iterCompanyResults({ task_id: task.task_id })) {
+  console.log(company.name, company.location?.country, company.industry);
+
+  // The company's best address: never a support, press, legal, careers or other one,
+  // and an inferred one only once it was checked valid.
+  console.log(company.primary_email?.value, company.primary_email?.type);
+  console.log(company.primary_contact?.name, company.primary_contact?.reason);
+
+  for (const person of company.people) {
+    for (const email of person.emails) {
+      // source 'inferred' with confidence 'high' (pattern learned from the company's own addresses) or 'low'.
+      console.log(person.name, email.value, email.source, email.confidence, email.verification?.status);
+    }
+  }
+
+  // Search only: the fit score and what the company's own pages confirm.
+  if (company.score) {
+    console.log(company.score.value, company.score.fully_verified);
+    console.log(unverifiedCriteria(company.score).map((check) => check.criterion));
+  }
+}
+```
+
+- `emails[].type` is `personal`, `leadership`, `sales`, `general`, `press`, `support`, `careers`, `legal` or `other`. `source` is `website`, `search`, `linkedin` or `inferred`.
+- `verification` is null until the `email_check` stage ran (and when `verify_emails` is false). `verification.status` is `valid`, `invalid`, `risky` (catch-all domain, or no MX but an A record) or `unknown`. `verification.checks` has `syntax`, `mx`, `smtp` and `web`.
+- `phones[].value` is E.164 when the number parses. `socials[].type` is `linkedin`, `x`, `facebook`, `instagram`, `github`, `youtube`, `tiktok`, `crunchbase`, `discord`, `telegram` or `medium`. `pages` lists the pages that were read.
+- `people[].roles` is the subset of the request's `roles` the person holds. `verified` is true when a quote on the company's own site or the person's current LinkedIn position shows the role, and `evidence` has that quote.
+- `contact_coverage` says what was found, with the names of `filters.require`.
+- `score` (Company Search) has `value`, `qualified`, `relevance`, `summary`, `matched_signals`, `reasons`, `concerns`, `criteria_checks` and `fully_verified`. `unverifiedCriteria` works on it as on a People Search score.
+- Result types accept fields a newer API adds, so a newer worker does not break your types.
+
+A finished task has `completion_reason`: People Search's reasons, plus `all_domains_processed` for Company Enrich. `coverage_limited` is true when a budget stopped it before `count`, and `warnings` lists what made part of it less reliable, such as `enrichment_time_limit`.
+
+### Pricing
+
+Company Search and Company Enrich are billed per company delivered. The create call reserves `count` companies (Company Enrich: one per domain you send) at the route price, and the rest of the reservation is returned when the task ends:
+
+- Company Search: $90 per 1000 companies ($0.09 each), with a minimum of 2 when it delivers any.
+- Company Enrich: $50 per 1000 companies ($0.05 each), with a minimum of 1.
+- A task that delivers no companies costs $0. A company left out by `min_score` or `filters.require` is not billed.
+- `reserved_cost_usd` and `final_cost_usd` on the task show the reserved and final amounts. All task, results and export calls are free.
+
+Current prices are at <https://desearch.ai/pricing>. Results stay available for 30 days after a task ends. After that, `getCompanyResults` and `exportCompanyResults` fail with HTTP 410.
+
+### Idempotency and metadata
+
+Both create methods take `{ idempotencyKey }` and `{ includeMetadata: true }` as the second argument, like the People Search methods. Both requests take `metadata`, with the same rules as People Search. The task returns it, and `listCompanyTasks` can filter by it:
+
+```ts
+const { tasks, next_cursor } = await client.listCompanyTasks({
+  type: 'enrich', // or 'search'; leave out for both
+  status: ['running', 'paused'],
+  metadata: { campaign: 'q4' },
+  limit: 20,
+});
+```
+
+### Pause, resume and cancel
+
+```ts
+import { CompanyTaskConflictError } from 'desearch-js';
+
+await client.pauseCompanyTask({ task_id: task.task_id });
+await client.resumeCompanyTask({ task_id: task.task_id });
+
+try {
+  await client.cancelCompanyTask({ task_id: task.task_id });
+} catch (error) {
+  if (error instanceof CompanyTaskConflictError) {
+    // HTTP 409: the task's status does not allow this action.
+    console.log(error.detail, error.task.status);
+  } else {
+    throw error;
+  }
+}
+```
+
+Cancelling bills only the companies delivered so far. A task cancelled before it starts costs nothing. A task paused for more than 7 days is cancelled.
+
+### Export
+
+`exportCompanyResults({ task_id, format })` returns text. `format` is `csv` (the default) or `jsonl`. CSV has one row per company: its domain, name, fit score, location, primary email, emails, phones and social profiles, then the CEO (or managing director), founder, CTO and CFO with their title, email, email status and LinkedIn profile, and `fully_verified`, `unverified_criteria` and `enrichment_status`. JSON Lines has one company per line with every field. Fields the later stages have not filled in yet are empty.
+
 ## Tech stack
 
 - TypeScript `^5.9.3`
@@ -490,7 +706,7 @@ Key design decisions in the current source:
 - `extract()` and the legacy `webCrawl()` method return text while most other methods return JSON-shaped data
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
-- People Search methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
+- People Search and company methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
 
 See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.
 
@@ -508,7 +724,7 @@ Non-HTTP failures are wrapped as:
 Unexpected Error: <message>
 ```
 
-The one exception is `PeopleTaskConflictError`, which pause, resume and cancel throw on HTTP 409. Its message keeps the `HTTP 409: <response body>` format, and it adds `status`, `detail` and the current `task`.
+The exceptions are `PeopleTaskConflictError` and `CompanyTaskConflictError`, which People Search and company pause, resume and cancel throw on HTTP 409. Their message keeps the `HTTP 409: <response body>` format, and they add `status`, `detail` and the current `task`.
 
 Example:
 
@@ -531,7 +747,7 @@ try {
 
 Current limitations include:
 - no configurable base URL
-- no timeout, retry, or abort controls for individual requests (`waitForPeopleTask` has a polling timeout but cannot be aborted)
+- no timeout, retry, or abort controls for individual requests (`waitForPeopleTask` and `waitForCompanyTask` have a polling timeout but cannot be aborted)
 - `aiSearch` always disables streaming
 - runtime failures surface as plain `Error` strings rather than typed SDK errors
 

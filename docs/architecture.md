@@ -24,11 +24,15 @@ This file contains:
 - all public SDK methods
 - `PeopleTaskConflictError`, the error class thrown when a People Search task action is refused
 
-Those public methods fall into four groups:
+Those public methods fall into six groups:
 - AI search methods
 - X or Twitter methods
-- web methods
+- TikTok, Facebook and Instagram methods
+- web methods, including the Search API
 - People Search methods and helpers
+- network stats methods, including the Server-Sent Events stream
+
+The file also holds a small `SseParser` for `text/event-stream` bodies.
 
 ### `src/types.ts`
 
@@ -106,6 +110,8 @@ All requests include:
 { Authorization: this.apiKey }
 ```
 
+The exception is the network stats routes, which need no API key: `networkStats`, `networkStatsHistory` and `streamNetworkStats` send no `Authorization` header (the internal `omitApiKey` request setting).
+
 For POST requests with a payload, the helper also adds:
 
 ```ts
@@ -159,6 +165,7 @@ The wrapper is:
     usageCount?: number,
     service?: string,
     currency?: string,
+    nextCursor?: string,
   },
 }
 ```
@@ -168,6 +175,7 @@ Metadata comes from these response headers on the same API response:
 - `X-Desearch-Usage-Count`
 - `X-Desearch-Service`
 - `X-Desearch-Currency`
+- `x-desearch-next-cursor` (`nextCursor`: the next-page cursor of the social list routes, absent on the last page)
 
 Numeric headers are parsed defensively. Missing, empty, or malformed values are omitted from `metadata` instead of throwing or failing an otherwise successful SDK call.
 
@@ -230,6 +238,18 @@ These use GET requests:
 The main difference is the response shape:
 - `webSearch` expects JSON
 - `extract` and `webCrawl` can return text or HTML, and the SDK treats non-JSON responses as text
+
+### TikTok, Facebook and Instagram methods
+
+- `tiktokSearch`, `facebookSearch` and `instagramSearch` POST a JSON body.
+- The other social methods are GET calls. The target (`id`, `username`, `video_id`, `profile_id`, `post_id`, `shortcode` or `tag`) is URL-encoded into the path by `socialPath`, and only `count`, `cursor` (and `region` for trending) go in the query string. The API decodes the path before routing, so an ID or post URL that contains `/` reaches its `{id:path}` route as one value.
+- List routes return a JSON array and put the next-page cursor in the `x-desearch-next-cursor` header. The SDK surfaces it as `metadata.nextCursor` when the caller passes `{ includeMetadata: true }`, and the caller sends it back as `cursor` (in the body for the two paginated searches, in the query elsewhere). The SDK never builds or changes a cursor, and has no auto-paging helper for these routes.
+
+### Network stats methods
+
+- `networkStats` and `networkStatsHistory` are plain GET calls through `handleRequest`, without the `Authorization` header.
+- `streamNetworkStats` is an async generator with its own fetch, because `handleRequest` buffers the whole body. It sends `Accept: text/event-stream` and, when given, `Last-Event-ID`. It reads the body with a stream reader, decodes UTF-8 incrementally and feeds `SseParser`, which follows the WHATWG event stream rules (CRLF, LF or CR line ends, comments, multi-line `data`, the last event ID). It yields `{ id, data }` for each `stats` event and skips other event types.
+- Leaving the loop cancels the reader, which closes the connection. Aborting `signal` ends the loop without an error. A non-2xx response throws `HTTP <status>: <body>`; a connection failure or invalid event JSON throws `Unexpected Error: <message>`. There is no automatic reconnect.
 
 ### People Search methods
 

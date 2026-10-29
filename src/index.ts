@@ -50,6 +50,41 @@ import type {
   WebSearchResultsResponse,
   WebCrawlParams,
   TwitterScraperTweet,
+  SearchApiRequest,
+  SearchApiResponse,
+  TikTokSearchRequest,
+  TikTokPostByIdParams,
+  TikTokProfileParams,
+  TikTokProfilePostsParams,
+  TikTokCommentsParams,
+  TikTokHashtagParams,
+  TikTokTrendingParams,
+  TikTokPost,
+  TikTokProfile,
+  TikTokComment,
+  FacebookSearchRequest,
+  FacebookPostByIdParams,
+  FacebookProfileParams,
+  FacebookProfilePostsParams,
+  FacebookCommentsParams,
+  FacebookHashtagParams,
+  FacebookPost,
+  FacebookProfile,
+  FacebookComment,
+  InstagramSearchRequest,
+  InstagramMediaParams,
+  InstagramProfileParams,
+  InstagramProfilePostsParams,
+  InstagramCommentsParams,
+  InstagramHashtagParams,
+  InstagramSearchResult,
+  InstagramMedia,
+  InstagramProfile,
+  InstagramComment,
+  NetworkStatsResponse,
+  NetworkStatsHistoryResponse,
+  NetworkStatsStreamEvent,
+  StreamNetworkStatsOptions,
 } from './types';
 
 const BASE_URL = 'https://api.desearch.ai';
@@ -68,6 +103,103 @@ interface RequestConfig {
   headers?: Record<string, string>;
   /** Builds a specific error for a non-2xx response; return undefined for the default error. */
   onErrorResponse?: (status: number, body: string) => Error | undefined;
+  /** Send no Authorization header, for the routes that need no API key (network stats). */
+  omitApiKey?: boolean;
+}
+
+/** One dispatched Server-Sent Event. */
+interface SseEvent {
+  id: string | null;
+  event: string;
+  data: string;
+}
+
+/**
+ * Incremental `text/event-stream` parser that follows the WHATWG event stream rules: lines end with
+ * CRLF, LF or CR; a blank line dispatches the event; `:` lines are comments; `data` lines are joined
+ * with LF; the last event ID carries over to later events; an event without data is not dispatched.
+ */
+class SseParser {
+  private buffer = '';
+  private data: string[] = [];
+  private eventType = '';
+  private lastEventId: string | null = null;
+
+  /** Adds decoded text and returns the events it completes. */
+  push(text: string): SseEvent[] {
+    this.buffer += text;
+    const events: SseEvent[] = [];
+    for (;;) {
+      const match = /\r\n|\r|\n/.exec(this.buffer);
+      // A trailing CR may be the first half of a CRLF split across chunks: wait for more text.
+      if (
+        !match ||
+        (match[0] === '\r' && match.index === this.buffer.length - 1)
+      ) {
+        return events;
+      }
+      const line = this.buffer.slice(0, match.index);
+      this.buffer = this.buffer.slice(match.index + match[0].length);
+      const event = this.processLine(line);
+      if (event) {
+        events.push(event);
+      }
+    }
+  }
+
+  /** Ends the stream. A trailing CR still ends its line; an event not ended by a blank line is dropped. */
+  end(): SseEvent[] {
+    if (!this.buffer.endsWith('\r')) {
+      return [];
+    }
+    const events = this.push('\n');
+    this.buffer = '';
+    return events;
+  }
+
+  private processLine(line: string): SseEvent | undefined {
+    if (line === '') {
+      return this.dispatch();
+    }
+    if (line.startsWith(':')) {
+      return undefined;
+    }
+    const colon = line.indexOf(':');
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value = colon === -1 ? '' : line.slice(colon + 1);
+    if (value.startsWith(' ')) {
+      value = value.slice(1);
+    }
+    if (field === 'event') {
+      this.eventType = value;
+    } else if (field === 'data') {
+      this.data.push(value);
+    } else if (field === 'id' && !value.includes('\0')) {
+      this.lastEventId = value;
+    }
+    // `retry` and unknown fields are ignored.
+    return undefined;
+  }
+
+  private dispatch(): SseEvent | undefined {
+    const data = this.data;
+    const event = this.eventType || 'message';
+    this.data = [];
+    this.eventType = '';
+    if (data.length === 0) {
+      return undefined;
+    }
+    return { id: this.lastEventId, event, data: data.join('\n') };
+  }
+}
+
+/** The SDK's `Unexpected Error: <message>` wrapper for failures that are not HTTP errors. */
+function unexpectedError(error: unknown): Error {
+  return new Error(
+    `Unexpected Error: ${
+      error instanceof Error ? error.message : String(error)
+    }`
+  );
 }
 
 /**
@@ -141,6 +273,9 @@ export class Desearch {
     );
     const service = this.parseStringHeader(headers.get('x-desearch-service'));
     const currency = this.parseStringHeader(headers.get('x-desearch-currency'));
+    const nextCursor = this.parseStringHeader(
+      headers.get('x-desearch-next-cursor')
+    );
 
     return {
       ...(costUsd !== undefined ? { costUsd } : {}),
@@ -148,6 +283,7 @@ export class Desearch {
       ...(usageCount !== undefined ? { usageCount } : {}),
       ...(service !== undefined ? { service } : {}),
       ...(currency !== undefined ? { currency } : {}),
+      ...(nextCursor !== undefined ? { nextCursor } : {}),
     };
   }
 
@@ -180,7 +316,7 @@ export class Desearch {
       let url = `${this.baseURL}${path}`;
       const headers: Record<string, string> = {
         ...config?.headers,
-        Authorization: this.apiKey,
+        ...(config?.omitApiKey ? {} : { Authorization: this.apiKey }),
       };
       let body: string | undefined;
 
@@ -251,6 +387,15 @@ export class Desearch {
     return `/desearch/people/tasks/${encodeURIComponent(
       params.task_id
     )}${suffix}`;
+  }
+
+  /**
+   * `<prefix>/<value><suffix>` with the path parameter URL-encoded. A value that contains `/`
+   * (a post URL, or an ID such as `Meta/posts/123`) is sent as `%2F` and still reaches the API's
+   * `{id:path}` routes as one value.
+   */
+  private socialPath(prefix: string, value: string, suffix = ''): string {
+    return `${prefix}/${encodeURIComponent(value)}${suffix}`;
   }
 
   /** People Search query params: drops `task_id` (it goes in the path) and joins arrays with commas. */
@@ -832,6 +977,664 @@ export class Desearch {
   }
 
   /**
+   * Search the web and return ranked pages, each with the passage that best matches the query (Search API).
+   *
+   * The JSON body includes `cost_usd`, `usage_count`, `service` and `currency`.
+   *
+   * @param payload - The search request including query, mode (fast or balanced), count (10, 15 or 20), date range, highlights and page_text.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns Ranked results and the cost of the request, or a metadata wrapper when opted in.
+   */
+  async searchApi(
+    payload: SearchApiRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<SearchApiResponse>>;
+  async searchApi(
+    payload: SearchApiRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<SearchApiResponse>;
+  async searchApi(
+    payload: SearchApiRequest,
+    options: DesearchRequestOptions
+  ): Promise<SearchApiResponse | DesearchResponse<SearchApiResponse>>;
+  async searchApi(
+    payload: SearchApiRequest,
+    options?: DesearchRequestOptions
+  ): Promise<SearchApiResponse | DesearchResponse<SearchApiResponse>> {
+    return this.handleRequest<SearchApiResponse>(
+      'POST',
+      '/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Search public TikTok posts by keyword.
+   *
+   * Each post `id` is the canonical TikTok video ID and works with `tiktokComments` and `tiktokPostById`.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param payload - The search request including query, count (1-100), optional sort, and the cursor of the previous page.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of TikTok posts, or a metadata wrapper when opted in.
+   */
+  async tiktokSearch(
+    payload: TikTokSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokPost[]>>;
+  async tiktokSearch(
+    payload: TikTokSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokPost[]>;
+  async tiktokSearch(
+    payload: TikTokSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>>;
+  async tiktokSearch(
+    payload: TikTokSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>> {
+    return this.handleRequest<TikTokPost[]>(
+      'POST',
+      '/desearch/tiktok/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public TikTok post by its ID.
+   *
+   * @param params - Object containing the TikTok video/post ID (URL-encoded into the path).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The TikTok post, or a metadata wrapper when opted in.
+   */
+  async tiktokPostById(
+    params: TikTokPostByIdParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokPost>>;
+  async tiktokPostById(
+    params: TikTokPostByIdParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokPost>;
+  async tiktokPostById(
+    params: TikTokPostByIdParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokPost | DesearchResponse<TikTokPost>>;
+  async tiktokPostById(
+    params: TikTokPostByIdParams,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokPost | DesearchResponse<TikTokPost>> {
+    return this.handleRequest<TikTokPost>(
+      'GET',
+      this.socialPath('/desearch/tiktok/post', params.id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public TikTok profile by username.
+   *
+   * @param params - Object containing the TikTok username without @.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The TikTok profile, or a metadata wrapper when opted in.
+   */
+  async tiktokProfile(
+    params: TikTokProfileParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokProfile>>;
+  async tiktokProfile(
+    params: TikTokProfileParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokProfile>;
+  async tiktokProfile(
+    params: TikTokProfileParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokProfile | DesearchResponse<TikTokProfile>>;
+  async tiktokProfile(
+    params: TikTokProfileParams,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokProfile | DesearchResponse<TikTokProfile>> {
+    return this.handleRequest<TikTokProfile>(
+      'GET',
+      this.socialPath('/desearch/tiktok/profile', params.username),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public posts of a TikTok user.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the TikTok username without @, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of TikTok posts, or a metadata wrapper when opted in.
+   */
+  async tiktokProfilePosts(
+    params: TikTokProfilePostsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokPost[]>>;
+  async tiktokProfilePosts(
+    params: TikTokProfilePostsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokPost[]>;
+  async tiktokProfilePosts(
+    params: TikTokProfilePostsParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>>;
+  async tiktokProfilePosts(
+    params: TikTokProfilePostsParams,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>> {
+    return this.handleRequest<TikTokPost[]>(
+      'GET',
+      this.socialPath('/desearch/tiktok/profile', params.username, '/posts'),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public comments of a TikTok video.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the TikTok video ID, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of TikTok comments, or a metadata wrapper when opted in.
+   */
+  async tiktokComments(
+    params: TikTokCommentsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokComment[]>>;
+  async tiktokComments(
+    params: TikTokCommentsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokComment[]>;
+  async tiktokComments(
+    params: TikTokCommentsParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokComment[] | DesearchResponse<TikTokComment[]>>;
+  async tiktokComments(
+    params: TikTokCommentsParams,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokComment[] | DesearchResponse<TikTokComment[]>> {
+    return this.handleRequest<TikTokComment[]>(
+      'GET',
+      this.socialPath('/desearch/tiktok/comments', params.video_id),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve public TikTok posts for a hashtag.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the hashtag without #, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of TikTok posts, or a metadata wrapper when opted in.
+   */
+  async tiktokHashtag(
+    params: TikTokHashtagParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokPost[]>>;
+  async tiktokHashtag(
+    params: TikTokHashtagParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokPost[]>;
+  async tiktokHashtag(
+    params: TikTokHashtagParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>>;
+  async tiktokHashtag(
+    params: TikTokHashtagParams,
+    options?: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>> {
+    return this.handleRequest<TikTokPost[]>(
+      'GET',
+      this.socialPath('/desearch/tiktok/hashtag', params.tag),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve trending TikTok posts for a region. Not paginated.
+   *
+   * @param params - Optional two-letter region code (default US) and count (1-100).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns An array of TikTok posts, or a metadata wrapper when opted in.
+   */
+  async tiktokTrending(
+    params: TikTokTrendingParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<TikTokPost[]>>;
+  async tiktokTrending(
+    params?: TikTokTrendingParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<TikTokPost[]>;
+  async tiktokTrending(
+    params: TikTokTrendingParams,
+    options: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>>;
+  async tiktokTrending(
+    params: TikTokTrendingParams = {},
+    options?: DesearchRequestOptions
+  ): Promise<TikTokPost[] | DesearchResponse<TikTokPost[]>> {
+    return this.handleRequest<TikTokPost[]>(
+      'GET',
+      '/desearch/tiktok/trending',
+      { region: params.region, count: params.count },
+      options
+    );
+  }
+
+  /**
+   * Search public Meta Ad Library records by keyword.
+   *
+   * Organic Facebook post search is not available.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param payload - The search request including query, count (1-100), and the cursor of the previous page.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Facebook posts (Ad Library records), or a metadata wrapper when opted in.
+   */
+  async facebookSearch(
+    payload: FacebookSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookPost[]>>;
+  async facebookSearch(
+    payload: FacebookSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookPost[]>;
+  async facebookSearch(
+    payload: FacebookSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>>;
+  async facebookSearch(
+    payload: FacebookSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>> {
+    return this.handleRequest<FacebookPost[]>(
+      'POST',
+      '/desearch/facebook/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Facebook post or media item by its ID.
+   *
+   * @param params - Object containing the Facebook post/media ID (URL-encoded into the path; IDs and URLs that contain `/` work).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Facebook post, or a metadata wrapper when opted in.
+   */
+  async facebookPostById(
+    params: FacebookPostByIdParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookPost>>;
+  async facebookPostById(
+    params: FacebookPostByIdParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookPost>;
+  async facebookPostById(
+    params: FacebookPostByIdParams,
+    options: DesearchRequestOptions
+  ): Promise<FacebookPost | DesearchResponse<FacebookPost>>;
+  async facebookPostById(
+    params: FacebookPostByIdParams,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookPost | DesearchResponse<FacebookPost>> {
+    return this.handleRequest<FacebookPost>(
+      'GET',
+      this.socialPath('/desearch/facebook/post', params.id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Facebook profile or page by username, vanity handle, or public ID.
+   *
+   * @param params - Object containing the Facebook profile/page ID or public handle.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Facebook profile or page, or a metadata wrapper when opted in.
+   */
+  async facebookProfile(
+    params: FacebookProfileParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookProfile>>;
+  async facebookProfile(
+    params: FacebookProfileParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookProfile>;
+  async facebookProfile(
+    params: FacebookProfileParams,
+    options: DesearchRequestOptions
+  ): Promise<FacebookProfile | DesearchResponse<FacebookProfile>>;
+  async facebookProfile(
+    params: FacebookProfileParams,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookProfile | DesearchResponse<FacebookProfile>> {
+    return this.handleRequest<FacebookProfile>(
+      'GET',
+      this.socialPath('/desearch/facebook/profile', params.profile_id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public posts of a Facebook profile or page.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the Facebook profile/page ID or public handle, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Facebook posts, or a metadata wrapper when opted in.
+   */
+  async facebookProfilePosts(
+    params: FacebookProfilePostsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookPost[]>>;
+  async facebookProfilePosts(
+    params: FacebookProfilePostsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookPost[]>;
+  async facebookProfilePosts(
+    params: FacebookProfilePostsParams,
+    options: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>>;
+  async facebookProfilePosts(
+    params: FacebookProfilePostsParams,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>> {
+    return this.handleRequest<FacebookPost[]>(
+      'GET',
+      this.socialPath(
+        '/desearch/facebook/profile',
+        params.profile_id,
+        '/posts'
+      ),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public comments of a Facebook post or media item.
+   *
+   * The provider returns about 10 comments per page whatever `count` is.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the Facebook post/media ID, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Facebook comments, or a metadata wrapper when opted in.
+   */
+  async facebookComments(
+    params: FacebookCommentsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookComment[]>>;
+  async facebookComments(
+    params: FacebookCommentsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookComment[]>;
+  async facebookComments(
+    params: FacebookCommentsParams,
+    options: DesearchRequestOptions
+  ): Promise<FacebookComment[] | DesearchResponse<FacebookComment[]>>;
+  async facebookComments(
+    params: FacebookCommentsParams,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookComment[] | DesearchResponse<FacebookComment[]>> {
+    return this.handleRequest<FacebookComment[]>(
+      'GET',
+      this.socialPath('/desearch/facebook/comments', params.post_id),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve public Meta Ad Library records for a keyword or hashtag.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the hashtag without #, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Facebook posts (Ad Library records), or a metadata wrapper when opted in.
+   */
+  async facebookHashtag(
+    params: FacebookHashtagParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<FacebookPost[]>>;
+  async facebookHashtag(
+    params: FacebookHashtagParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<FacebookPost[]>;
+  async facebookHashtag(
+    params: FacebookHashtagParams,
+    options: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>>;
+  async facebookHashtag(
+    params: FacebookHashtagParams,
+    options?: DesearchRequestOptions
+  ): Promise<FacebookPost[] | DesearchResponse<FacebookPost[]>> {
+    return this.handleRequest<FacebookPost[]>(
+      'GET',
+      this.socialPath('/desearch/facebook/hashtag', params.tag),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Search public Instagram profiles by keyword.
+   *
+   * Returns one page and does not paginate. Use `instagramHashtag` for media discovery.
+   *
+   * @param payload - The search request including query and count (1-100).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns An array of Instagram search results, or a metadata wrapper when opted in.
+   */
+  async instagramSearch(
+    payload: InstagramSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramSearchResult[]>>;
+  async instagramSearch(
+    payload: InstagramSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramSearchResult[]>;
+  async instagramSearch(
+    payload: InstagramSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<
+    InstagramSearchResult[] | DesearchResponse<InstagramSearchResult[]>
+  >;
+  async instagramSearch(
+    payload: InstagramSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<
+    InstagramSearchResult[] | DesearchResponse<InstagramSearchResult[]>
+  > {
+    return this.handleRequest<InstagramSearchResult[]>(
+      'POST',
+      '/desearch/instagram/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Instagram post or reel by shortcode, ID, or URL.
+   *
+   * @param params - Object containing the media shortcode, ID, or public URL (URL-encoded into the path).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Instagram media, or a metadata wrapper when opted in.
+   */
+  async instagramMedia(
+    params: InstagramMediaParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramMedia>>;
+  async instagramMedia(
+    params: InstagramMediaParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramMedia>;
+  async instagramMedia(
+    params: InstagramMediaParams,
+    options: DesearchRequestOptions
+  ): Promise<InstagramMedia | DesearchResponse<InstagramMedia>>;
+  async instagramMedia(
+    params: InstagramMediaParams,
+    options?: DesearchRequestOptions
+  ): Promise<InstagramMedia | DesearchResponse<InstagramMedia>> {
+    return this.handleRequest<InstagramMedia>(
+      'GET',
+      this.socialPath('/desearch/instagram/media', params.id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Instagram profile by username.
+   *
+   * @param params - Object containing the Instagram username without @.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Instagram profile, or a metadata wrapper when opted in.
+   */
+  async instagramProfile(
+    params: InstagramProfileParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramProfile>>;
+  async instagramProfile(
+    params: InstagramProfileParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramProfile>;
+  async instagramProfile(
+    params: InstagramProfileParams,
+    options: DesearchRequestOptions
+  ): Promise<InstagramProfile | DesearchResponse<InstagramProfile>>;
+  async instagramProfile(
+    params: InstagramProfileParams,
+    options?: DesearchRequestOptions
+  ): Promise<InstagramProfile | DesearchResponse<InstagramProfile>> {
+    return this.handleRequest<InstagramProfile>(
+      'GET',
+      this.socialPath('/desearch/instagram/profile', params.username),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public posts of an Instagram user.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the Instagram username without @, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Instagram media, or a metadata wrapper when opted in.
+   */
+  async instagramProfilePosts(
+    params: InstagramProfilePostsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramMedia[]>>;
+  async instagramProfilePosts(
+    params: InstagramProfilePostsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramMedia[]>;
+  async instagramProfilePosts(
+    params: InstagramProfilePostsParams,
+    options: DesearchRequestOptions
+  ): Promise<InstagramMedia[] | DesearchResponse<InstagramMedia[]>>;
+  async instagramProfilePosts(
+    params: InstagramProfilePostsParams,
+    options?: DesearchRequestOptions
+  ): Promise<InstagramMedia[] | DesearchResponse<InstagramMedia[]>> {
+    return this.handleRequest<InstagramMedia[]>(
+      'GET',
+      this.socialPath('/desearch/instagram/profile', params.username, '/posts'),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public comments of an Instagram post, identified by its shortcode.
+   *
+   * Numeric media IDs and composite post IDs are not accepted: the API answers 404.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the post shortcode (e.g. `DeuOR-CjKE9`), and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Instagram comments, or a metadata wrapper when opted in.
+   */
+  async instagramComments(
+    params: InstagramCommentsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramComment[]>>;
+  async instagramComments(
+    params: InstagramCommentsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramComment[]>;
+  async instagramComments(
+    params: InstagramCommentsParams,
+    options: DesearchRequestOptions
+  ): Promise<InstagramComment[] | DesearchResponse<InstagramComment[]>>;
+  async instagramComments(
+    params: InstagramCommentsParams,
+    options?: DesearchRequestOptions
+  ): Promise<InstagramComment[] | DesearchResponse<InstagramComment[]>> {
+    return this.handleRequest<InstagramComment[]>(
+      'GET',
+      this.socialPath('/desearch/instagram/comments', params.shortcode),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve public Instagram media for a hashtag.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the hashtag without #, and optional count (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Instagram media, or a metadata wrapper when opted in.
+   */
+  async instagramHashtag(
+    params: InstagramHashtagParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<InstagramMedia[]>>;
+  async instagramHashtag(
+    params: InstagramHashtagParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<InstagramMedia[]>;
+  async instagramHashtag(
+    params: InstagramHashtagParams,
+    options: DesearchRequestOptions
+  ): Promise<InstagramMedia[] | DesearchResponse<InstagramMedia[]>>;
+  async instagramHashtag(
+    params: InstagramHashtagParams,
+    options?: DesearchRequestOptions
+  ): Promise<InstagramMedia[] | DesearchResponse<InstagramMedia[]>> {
+    return this.handleRequest<InstagramMedia[]>(
+      'GET',
+      this.socialPath('/desearch/instagram/hashtag', params.tag),
+      { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
    * Find X accounts by what they post and how they describe themselves (X Profile Search).
    *
    * Starts a background People Search task and returns it at once (HTTP 202). This is the only billed People Search call:
@@ -1279,6 +2082,157 @@ export class Desearch {
         return;
       }
       cursor = page.next_cursor;
+    }
+  }
+
+  /**
+   * Get the latest public Desearch network counters and their per-second growth rates. Free; no API key is needed, and the SDK sends none.
+   *
+   * The current source is an estimate (`telemetry_kind`).
+   *
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The network stats snapshot, or a metadata wrapper when opted in.
+   */
+  async networkStats(
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<NetworkStatsResponse>>;
+  async networkStats(
+    options?: DesearchDefaultRequestOptions
+  ): Promise<NetworkStatsResponse>;
+  async networkStats(
+    options: DesearchRequestOptions
+  ): Promise<NetworkStatsResponse | DesearchResponse<NetworkStatsResponse>>;
+  async networkStats(
+    options?: DesearchRequestOptions
+  ): Promise<NetworkStatsResponse | DesearchResponse<NetworkStatsResponse>> {
+    return this.handleRequest<NetworkStatsResponse>(
+      'GET',
+      '/network/stats',
+      undefined,
+      options,
+      { omitApiKey: true }
+    );
+  }
+
+  /**
+   * Get the latest 20 minutes of network stats, one point per second. Free; no API key is needed, and the SDK sends none.
+   *
+   * Use it to fill a recent activity buffer before following `streamNetworkStats`.
+   *
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The network stats timeline, or a metadata wrapper when opted in.
+   */
+  async networkStatsHistory(
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<NetworkStatsHistoryResponse>>;
+  async networkStatsHistory(
+    options?: DesearchDefaultRequestOptions
+  ): Promise<NetworkStatsHistoryResponse>;
+  async networkStatsHistory(
+    options: DesearchRequestOptions
+  ): Promise<
+    NetworkStatsHistoryResponse | DesearchResponse<NetworkStatsHistoryResponse>
+  >;
+  async networkStatsHistory(
+    options?: DesearchRequestOptions
+  ): Promise<
+    NetworkStatsHistoryResponse | DesearchResponse<NetworkStatsHistoryResponse>
+  > {
+    return this.handleRequest<NetworkStatsHistoryResponse>(
+      'GET',
+      '/network/stats/history',
+      undefined,
+      options,
+      { omitApiKey: true }
+    );
+  }
+
+  /**
+   * Follow the live network stats: one snapshot per second over Server-Sent Events. Free; no API key is needed, and the SDK sends none.
+   *
+   * Returns an async iterator. Each item is a `stats` event: its `data` has the same shape as `networkStats()`.
+   * The stream runs until you `break` out of the loop (which closes the connection), `options.signal` aborts
+   * (the loop then ends without an error), or the server closes it. It does not reconnect by itself: call it
+   * again with `lastEventId` set to the last event's `id` to replay what you missed (up to 20 minutes) and continue.
+   *
+   * @param options - Optional `lastEventId` (sent as the `Last-Event-ID` header) and an AbortSignal.
+   * @returns An async iterator of network stats events.
+   * @throws Error `HTTP <status>: <body>` when the API refuses the stream, or `Unexpected Error: <message>` when the connection or an event's JSON fails.
+   */
+  async *streamNetworkStats(
+    options: StreamNetworkStatsOptions = {}
+  ): AsyncGenerator<NetworkStatsStreamEvent, void, undefined> {
+    const { lastEventId, signal } = options;
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    if (
+      lastEventId !== undefined &&
+      lastEventId !== null &&
+      `${lastEventId}` !== ''
+    ) {
+      headers['Last-Event-ID'] = String(lastEventId);
+    }
+
+    let response;
+    try {
+      response = await fetch(`${this.baseURL}/network/stats/stream`, {
+        method: 'GET',
+        headers,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
+      throw unexpectedError(error);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch((error: unknown) => {
+        throw unexpectedError(error);
+      });
+      throw new Error(`HTTP ${response.status}: ${errorBody}`);
+    }
+    if (!response.body) {
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const parser = new SseParser();
+    try {
+      for (;;) {
+        let chunk;
+        try {
+          chunk = await reader.read();
+        } catch (error) {
+          if (signal?.aborted) {
+            return;
+          }
+          throw unexpectedError(error);
+        }
+
+        const events: SseEvent[] = chunk.done
+          ? [...parser.push(decoder.decode()), ...parser.end()]
+          : parser.push(decoder.decode(chunk.value, { stream: true }));
+        for (const event of events) {
+          if (event.event !== 'stats') {
+            continue;
+          }
+          let data: NetworkStatsResponse;
+          try {
+            data = JSON.parse(event.data) as NetworkStatsResponse;
+          } catch (error) {
+            throw unexpectedError(error);
+          }
+          yield { id: event.id, data };
+        }
+        if (chunk.done) {
+          return;
+        }
+      }
+    } finally {
+      // Closes the connection when the caller stops early; a no-op once the stream has ended.
+      await reader.cancel().catch(() => undefined);
     }
   }
 }

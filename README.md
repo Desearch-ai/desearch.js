@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.6.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.9.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -19,9 +19,11 @@ What it covers today:
 - AI web-links search
 - AI X-links search
 - X search and lookup endpoints
-- web search
+- TikTok, Facebook and Instagram search, profiles, posts, comments and hashtags
+- web search and the Search API (ranked pages with the best passage)
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
+- public network stats, including a live Server-Sent Events stream
 
 What it does not try to be:
 - a browser-first SDK
@@ -101,11 +103,50 @@ The SDK sends that value as the `Authorization` header on every request.
 - `xPostReplies(params)` → `GET /twitter/replies/post`
 - `xTrends(params)` → `GET /twitter/trends`
 
+### TikTok methods
+
+- `tiktokSearch(payload)` → `POST /desearch/tiktok/search` (paginated)
+- `tiktokPostById(params)` → `GET /desearch/tiktok/post/{id}`
+- `tiktokProfile(params)` → `GET /desearch/tiktok/profile/{username}`
+- `tiktokProfilePosts(params)` → `GET /desearch/tiktok/profile/{username}/posts` (paginated)
+- `tiktokComments(params)` → `GET /desearch/tiktok/comments/{video_id}` (paginated)
+- `tiktokHashtag(params)` → `GET /desearch/tiktok/hashtag/{tag}` (paginated)
+- `tiktokTrending(params?)` → `GET /desearch/tiktok/trending`
+
+### Facebook methods
+
+- `facebookSearch(payload)` → `POST /desearch/facebook/search` (Meta Ad Library, paginated)
+- `facebookPostById(params)` → `GET /desearch/facebook/post/{id}`
+- `facebookProfile(params)` → `GET /desearch/facebook/profile/{profile_id}`
+- `facebookProfilePosts(params)` → `GET /desearch/facebook/profile/{profile_id}/posts` (paginated)
+- `facebookComments(params)` → `GET /desearch/facebook/comments/{post_id}` (paginated)
+- `facebookHashtag(params)` → `GET /desearch/facebook/hashtag/{tag}` (Meta Ad Library, paginated)
+
+### Instagram methods
+
+- `instagramSearch(payload)` → `POST /desearch/instagram/search` (one page, no cursor)
+- `instagramMedia(params)` → `GET /desearch/instagram/media/{id}`
+- `instagramProfile(params)` → `GET /desearch/instagram/profile/{username}`
+- `instagramProfilePosts(params)` → `GET /desearch/instagram/profile/{username}/posts` (paginated)
+- `instagramComments(params)` → `GET /desearch/instagram/comments/{shortcode}` (paginated)
+- `instagramHashtag(params)` → `GET /desearch/instagram/hashtag/{tag}` (paginated)
+
+See [Social pagination](#social-pagination) for the cursor flow.
+
 ### Web methods
 
 - `webSearch(params)` → `GET /web`
+- `searchApi(payload)` → `POST /search`
 - `extract(params)` → `GET /web/extract`
 - `webCrawl(params)` → `GET /web/crawl` (deprecated compatibility method)
+
+### Network stats methods
+
+No API key is needed for these, and the SDK sends none.
+
+- `networkStats()` → `GET /network/stats`
+- `networkStatsHistory()` → `GET /network/stats/history`
+- `streamNetworkStats(options?)` → `GET /network/stats/stream` (Server-Sent Events, async iterator)
 
 ### People Search methods
 
@@ -193,6 +234,22 @@ const results = await client.webSearch({
 });
 ```
 
+### Search API
+
+```ts
+const { results, cost_usd } = await client.searchApi({
+  query: 'Who won the 2024 Nobel Prize in Physics?',
+  mode: 'balanced', // or 'fast'
+  count: 10, // 10, 15 or 20
+  start_date: '2024-01-01',
+});
+for (const result of results) {
+  console.log(result.title, result.url, result.highlights?.[0]);
+}
+```
+
+Set `page_text: true` to get each page's full text, and `highlights: false` to leave out the best passage.
+
 ### Extract
 
 ```ts
@@ -203,6 +260,88 @@ const page = await client.extract({
 ```
 
 Existing `webCrawl()` integrations continue to use the deprecated `GET /web/crawl` compatibility route. Use `extract()` for new integrations.
+
+### TikTok, Facebook and Instagram
+
+```ts
+const posts = await client.tiktokSearch({ query: 'bittensor', count: 10 });
+const profile = await client.tiktokProfile({ username: 'tiktok' });
+const comments = await client.tiktokComments({ video_id: posts[0].id!, count: 20 });
+const trending = await client.tiktokTrending({ region: 'US', count: 10 });
+
+const ads = await client.facebookSearch({ query: 'running shoes' });
+const page = await client.facebookProfile({ profile_id: 'facebook' });
+const pagePosts = await client.facebookProfilePosts({ profile_id: 'facebook' });
+const post = await client.facebookPostById({ id: 'Meta/posts/1040495851972958' });
+
+const accounts = await client.instagramSearch({ query: 'nasa' });
+const media = await client.instagramMedia({ id: 'https://www.instagram.com/p/DeuOR-CjKE9/' });
+const igComments = await client.instagramComments({ shortcode: 'DeuOR-CjKE9' });
+const tagged = await client.instagramHashtag({ tag: 'ai', count: 20 });
+```
+
+Notes:
+- Each call reads one provider page. `count` (1-100) is a maximum, and a page can hold fewer items.
+- The SDK URL-encodes path parameters. An ID or post URL that contains `/`, such as `Meta/posts/1040495851972958`, works on the post, media and comments routes.
+- A TikTok post `id` works with `tiktokComments` and `tiktokPostById`. `instagramComments` takes the post shortcode (the code in the post URL); numeric media IDs return 404.
+- Facebook search and hashtag read the public Meta Ad Library. Organic Facebook post search is not available.
+- Fields the provider does not send are left out of each object, so every field of `TikTokPost`, `FacebookPost`, `InstagramMedia` and the other social types is optional.
+
+### Social pagination
+
+The paginated social methods return a JSON array. The cursor for the next page comes in the `x-desearch-next-cursor` response header, which the SDK returns as `metadata.nextCursor` when you pass `{ includeMetadata: true }`. Send it back unchanged as `cursor`, with the same target (username, tag, post or query), to read the next page. On the last page there is no cursor.
+
+```ts
+import Desearch, { type TikTokPost } from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
+
+const posts: TikTokPost[] = [];
+let cursor: string | undefined;
+do {
+  const { data, metadata } = await client.tiktokHashtag(
+    { tag: 'ai', count: 20, cursor },
+    { includeMetadata: true },
+  );
+  posts.push(...data);
+  cursor = metadata.nextCursor; // undefined on the last page
+} while (cursor && posts.length < 100);
+```
+
+- A cursor is opaque. Do not build or change one; send back exactly what you got.
+- A cursor is valid for 24 hours, on the same method and target. An expired, changed or other-target cursor fails with `HTTP 422` and is not charged.
+- The searches (`tiktokSearch`, `facebookSearch`) take `cursor` in the request body; the other paginated methods send it as a query parameter. The SDK handles both.
+- `instagramSearch` and `tiktokTrending` return one page and take no cursor.
+- Items repeated from the previous page are dropped and not charged again.
+
+### Network stats
+
+These routes are public: no API key is needed, and the SDK does not send yours. The counters are an estimate (`telemetry_kind: 'estimated'`).
+
+```ts
+const stats = await client.networkStats();
+console.log(stats.total_searchable_pages, stats.rates_per_second.urls_crawled_today);
+
+const history = await client.networkStatsHistory(); // the last 20 minutes, one point per second
+console.log(history.points.length);
+
+// Live: one snapshot per second over Server-Sent Events.
+let lastEventId: string | null = null;
+for await (const event of client.streamNetworkStats({
+  signal: AbortSignal.timeout(60_000), // stop after a minute; the loop ends without an error
+})) {
+  lastEventId = event.id;
+  console.log(event.data.updated_at, event.data.searches_completed_today);
+}
+
+// Resume later: the stream first replays what you missed (up to 20 minutes).
+for await (const event of client.streamNetworkStats({ lastEventId })) {
+  console.log(event.data.updated_at);
+  break; // leaving the loop closes the connection
+}
+```
+
+`streamNetworkStats` does not reconnect by itself. When the server closes the stream, the loop ends; call it again with `lastEventId` to continue.
 
 ### Optional response cost metadata
 
@@ -229,6 +368,8 @@ console.log(response.metadata.currency);
 ```
 
 The metadata wrapper works for JSON object, JSON array, and text endpoints such as `extract()` and `webCrawl()`. Missing or malformed metadata headers are ignored, so successful API calls still resolve normally.
+
+`metadata.nextCursor` is the next-page cursor of the paginated social methods (the `x-desearch-next-cursor` header). See [Social pagination](#social-pagination).
 
 ## People Search
 
@@ -450,6 +591,7 @@ The profiles library lists everyone your searches on one platform found, one ent
 | `npm run publish:beta` | Version, build, and publish with the `beta` npm tag |
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
+| `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the 1.9.0 methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview
 
@@ -470,6 +612,8 @@ Key design decisions in the current source:
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
 - People Search methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
+- path parameters (`task_id`, social IDs, usernames, tags) are URL-encoded
+- the network stats methods send no `Authorization` header; `streamNetworkStats()` reads the Server-Sent Events body incrementally instead of buffering it
 
 See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.
 
@@ -488,6 +632,8 @@ Unexpected Error: <message>
 ```
 
 The one exception is `PeopleTaskConflictError`, which pause, resume and cancel throw on HTTP 409. Its message keeps the `HTTP 409: <response body>` format, and it adds `status`, `detail` and the current `task`.
+
+`streamNetworkStats()` throws the same two formats from inside the loop: `HTTP <status>: <body>` when the API refuses the stream, and `Unexpected Error: <message>` when the connection fails or an event is not valid JSON. Aborting its `signal` ends the loop without an error.
 
 Example:
 
@@ -512,6 +658,7 @@ Current limitations include:
 - no configurable base URL
 - no timeout, retry, or abort controls for individual requests (`waitForPeopleTask` has a polling timeout but cannot be aborted)
 - `aiSearch` always disables streaming
+- `streamNetworkStats` does not reconnect by itself
 - runtime failures surface as plain `Error` strings rather than typed SDK errors
 
 Full details: [docs/known-issues.md](./docs/known-issues.md)

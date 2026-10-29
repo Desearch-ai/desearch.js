@@ -192,7 +192,7 @@ export interface WebCrawlParams extends ExtractParams {}
 // Response Metadata Types
 // ============================================================================
 
-/** Cost and usage metadata parsed from Desearch response headers. */
+/** Cost, usage and paging metadata parsed from Desearch response headers. */
 export interface DesearchCostMetadata {
   /** Cost for the request in USD, parsed from X-Desearch-Cost-Usd when present and numeric. */
   costUsd?: number;
@@ -204,6 +204,12 @@ export interface DesearchCostMetadata {
   service?: string;
   /** Billing currency for the request, parsed from X-Desearch-Currency when present. */
   currency?: string;
+  /**
+   * Cursor for the next page of a TikTok, Facebook or Instagram list route, from the
+   * x-desearch-next-cursor header. Absent on the last page. It is opaque: send it back unchanged
+   * as `cursor` on the same method with the same target. It is valid for 24 hours.
+   */
+  nextCursor?: string;
 }
 
 /** Wrapper returned when an SDK method is called with { includeMetadata: true }. */
@@ -1253,6 +1259,487 @@ export interface PeopleProfilesPage {
   total: number;
   /** Pass as `cursor` for the next page; null on the last page */
   next_cursor?: string | null;
+}
+
+// ============================================================================
+// Social Pagination Types
+// ============================================================================
+
+/**
+ * Paging fields of the TikTok, Facebook and Instagram list routes.
+ * One call reads one provider page: `count` is a maximum, and a page can be smaller.
+ */
+export interface SocialPageParams {
+  /** Maximum number of items to return (1-100, default 20). The provider page may be smaller. */
+  count?: number;
+  /**
+   * Opaque cursor for the next page: the `nextCursor` metadata (x-desearch-next-cursor header) of the
+   * previous page, sent back unchanged with the same target. Omit it for the first page. A cursor is
+   * valid for 24 hours; an expired, changed or other-target cursor is a 422 and is not charged.
+   */
+  cursor?: string | null;
+}
+
+// ============================================================================
+// TikTok Types
+// ============================================================================
+
+export interface TikTokSearchRequest {
+  /** Keyword or phrase to search on TikTok */
+  query: string;
+  /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
+  count?: number;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and sort */
+  cursor?: string | null;
+  /** Sort option when supported */
+  sort?: string | null;
+}
+
+export interface TikTokPostByIdParams {
+  /** TikTok video/post ID */
+  id: string;
+}
+
+export interface TikTokProfileParams {
+  /** TikTok username without @ */
+  username: string;
+}
+
+export interface TikTokProfilePostsParams extends SocialPageParams {
+  /** TikTok username without @ */
+  username: string;
+}
+
+export interface TikTokCommentsParams extends SocialPageParams {
+  /** TikTok video/post ID */
+  video_id: string;
+}
+
+export interface TikTokHashtagParams extends SocialPageParams {
+  /** Hashtag without # */
+  tag: string;
+}
+
+export interface TikTokTrendingParams {
+  /** Two-letter region code (default US) */
+  region?: string;
+  /** Maximum number of items to return (1-100, default 20). The provider page may be smaller. */
+  count?: number;
+}
+
+export interface TikTokAuthor {
+  id?: string | null;
+  username?: string | null;
+  nickname?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+  following?: number | null;
+  followers?: number | null;
+  /** Total likes the account received */
+  heart?: number | null;
+}
+
+export interface TikTokStats {
+  playCount?: number | null;
+  /** Likes */
+  digCount?: number | null;
+  commentCount?: number | null;
+  shareCount?: number | null;
+  collectCount?: number | null;
+}
+
+export interface TikTokMusic {
+  id?: string | null;
+  title?: string | null;
+  authorName?: string | null;
+}
+
+/** A normalized public TikTok post. Fields the provider does not send are left out. */
+export interface TikTokPost {
+  /** Canonical TikTok video ID; pass it to `tiktokComments` or `tiktokPostById` */
+  id?: string | null;
+  /** Opaque upstream ID, when present */
+  providerId?: string | null;
+  url?: string | null;
+  text?: string | null;
+  createTime?: string | null;
+  author?: TikTokAuthor | null;
+  stats?: TikTokStats | null;
+  /** Left out when the provider payload has no music object. Hashtag and trending posts have none. */
+  music?: TikTokMusic | null;
+  /** Hashtags from the post or its caption; empty when none */
+  hashtags?: string[];
+  /** Mentions from the post or @handles in its caption; empty when none */
+  mentions?: string[];
+  videoDuration?: number | null;
+  videoWidth?: number | null;
+  videoHeight?: number | null;
+  thumbnailUrl?: string | null;
+  mediaUrl?: string | null;
+}
+
+/** A normalized public TikTok profile. */
+export interface TikTokProfile {
+  id?: string | null;
+  username?: string | null;
+  nickname?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+  following?: number | null;
+  followers?: number | null;
+  /** Total likes the account received */
+  heart?: number | null;
+  bio?: string | null;
+  videoCount?: number | null;
+  digCount?: number | null;
+}
+
+/** A normalized public TikTok comment. */
+export interface TikTokComment {
+  /** TikTok comment ID. Left out when the provider page does not include one. */
+  id?: string | null;
+  videoId?: string | null;
+  text?: string | null;
+  createTime?: string | null;
+  author?: TikTokAuthor | null;
+  likes?: number | null;
+  replies?: Record<string, unknown>[];
+}
+
+// ============================================================================
+// Facebook Types
+// ============================================================================
+
+export interface FacebookSearchRequest {
+  /** Meta Ad Library keyword, phrase, or hashtag to search */
+  query: string;
+  /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
+  count?: number;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query */
+  cursor?: string | null;
+}
+
+export interface FacebookPostByIdParams {
+  /** Facebook public post/media ID */
+  id: string;
+}
+
+export interface FacebookProfileParams {
+  /** Facebook profile/page ID or public handle */
+  profile_id: string;
+}
+
+export interface FacebookProfilePostsParams extends SocialPageParams {
+  /** Facebook profile/page ID or public handle */
+  profile_id: string;
+}
+
+export interface FacebookCommentsParams extends SocialPageParams {
+  /** Facebook public post/media ID */
+  post_id: string;
+}
+
+export interface FacebookHashtagParams extends SocialPageParams {
+  /** Hashtag without # */
+  tag: string;
+}
+
+/** A normalized public Facebook profile or page. */
+export interface FacebookProfile {
+  id?: string | null;
+  username?: string | null;
+  name?: string | null;
+  url?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+  bio?: string | null;
+  category?: string | null;
+  followers?: number | null;
+  likes?: number | null;
+}
+
+export interface FacebookPostStats {
+  reactionCount?: number | null;
+  commentCount?: number | null;
+  shareCount?: number | null;
+  viewCount?: number | null;
+}
+
+export interface FacebookMedia {
+  type?: string | null;
+  url?: string | null;
+  thumbnail?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
+/** A normalized public Facebook post, or a Meta Ad Library record (search and hashtag). */
+export interface FacebookPost {
+  id?: string | null;
+  /** The Ad Library or post URL */
+  url?: string | null;
+  text?: string | null;
+  createTime?: string | null;
+  author?: FacebookProfile | null;
+  stats?: FacebookPostStats | null;
+  media?: FacebookMedia[];
+  hashtags?: string[];
+  /** Ad landing URL */
+  linkUrl?: string | null;
+  /** Ad call to action: the button text, or the CTA type such as SHOP_NOW */
+  cta?: string | null;
+  /** Ad headline */
+  headline?: string | null;
+  /** Ad link description */
+  linkDescription?: string | null;
+  /** Ad end date: the provider's date string, or ISO 8601 UTC. Left out when the provider sends none. */
+  endDate?: string | null;
+  /** Whether the ad is active. Left out when the provider does not say. */
+  active?: boolean | null;
+  /** Publisher platforms, such as FACEBOOK or INSTAGRAM. Empty when none. */
+  platforms?: string[];
+}
+
+/** A normalized public Facebook comment. */
+export interface FacebookComment {
+  id?: string | null;
+  postId?: string | null;
+  text?: string | null;
+  createTime?: string | null;
+  author?: FacebookProfile | null;
+  likes?: number | null;
+  replies?: Record<string, unknown>[];
+}
+
+// ============================================================================
+// Instagram Types
+// ============================================================================
+
+/** Instagram search returns one page and does not paginate, so it takes no `cursor`. */
+export interface InstagramSearchRequest {
+  /** Keyword, username, or phrase to search on Instagram */
+  query: string;
+  /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
+  count?: number;
+}
+
+export interface InstagramMediaParams {
+  /** Instagram media shortcode, ID, or public URL */
+  id: string;
+}
+
+export interface InstagramProfileParams {
+  /** Instagram username without @ */
+  username: string;
+}
+
+export interface InstagramProfilePostsParams extends SocialPageParams {
+  /** Instagram username without @ */
+  username: string;
+}
+
+export interface InstagramCommentsParams extends SocialPageParams {
+  /**
+   * Instagram post shortcode: the code in the post URL, such as `DeuOR-CjKE9` in
+   * https://www.instagram.com/p/DeuOR-CjKE9/. Numeric media IDs and composite post IDs return 404.
+   */
+  shortcode: string;
+}
+
+export interface InstagramHashtagParams extends SocialPageParams {
+  /** Hashtag without # */
+  tag: string;
+}
+
+/** A normalized public Instagram profile. */
+export interface InstagramProfile {
+  id?: string | null;
+  username?: string | null;
+  fullName?: string | null;
+  biography?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+  private?: boolean | null;
+  /** Exact follower count when the provider includes one */
+  followers?: number | null;
+  following?: number | null;
+  /** Exact account post total when the profile payload proves one */
+  postsCount?: number | null;
+  externalUrl?: string | null;
+  category?: string | null;
+}
+
+export interface InstagramStats {
+  likeCount?: number | null;
+  commentCount?: number | null;
+  viewCount?: number | null;
+  playCount?: number | null;
+}
+
+/** A normalized public Instagram post, reel or carousel. */
+export interface InstagramMedia {
+  id?: string | null;
+  /** Pass it to `instagramComments` */
+  shortcode?: string | null;
+  url?: string | null;
+  caption?: string | null;
+  createTime?: string | null;
+  mediaType?: string | null;
+  mediaUrl?: string | null;
+  thumbnailUrl?: string | null;
+  author?: InstagramProfile | null;
+  stats?: InstagramStats | null;
+  hashtags?: string[];
+  mentions?: string[];
+  /** Carousel items */
+  children?: Record<string, unknown>[];
+}
+
+/** A normalized public Instagram comment. */
+export interface InstagramComment {
+  id?: string | null;
+  mediaId?: string | null;
+  text?: string | null;
+  createTime?: string | null;
+  author?: InstagramProfile | null;
+  likes?: number | null;
+  replies?: Record<string, unknown>[];
+}
+
+/** Kind of an Instagram search result. */
+export type InstagramSearchResultType = 'profile' | 'hashtag' | 'media';
+
+/** One Instagram search result. */
+export interface InstagramSearchResult {
+  id?: string | null;
+  type: InstagramSearchResultType;
+  username?: string | null;
+  title?: string | null;
+  url?: string | null;
+  avatar?: string | null;
+  /** Exact follower count when profile enrichment includes one */
+  followers?: number | null;
+  /** Not returned: search does not provide an exact account post total */
+  mediaCount?: number | null;
+}
+
+// ============================================================================
+// Search API Types
+// ============================================================================
+
+/** `fast` returns results sooner. `balanced` favors relevance. */
+export type SearchApiMode = 'fast' | 'balanced';
+
+export interface SearchApiRequest {
+  /** Search query (1-2000 characters) */
+  query: string;
+  /** `fast` or `balanced` (default balanced) */
+  mode?: SearchApiMode;
+  /** Number of results to return: 10, 15 or 20 (default 10) */
+  count?: number;
+  /** Only return pages published on or after this date (YYYY-MM-DD) */
+  start_date?: string | null;
+  /** Only return pages published on or before this date (YYYY-MM-DD) */
+  end_date?: string | null;
+  /** Include the passage that best matches the query (default true) */
+  highlights?: boolean;
+  /** Include the full page text (default false) */
+  page_text?: boolean;
+}
+
+/** One ranked page from the Search API. */
+export interface SearchApiResult {
+  url: string;
+  title: string;
+  /** Publication date (YYYY-MM-DD) when known */
+  published_date?: string | null;
+  /** Passages that best match the query. Returned unless the request sets `highlights: false`. */
+  highlights?: string[] | null;
+  /** Full page text. Returned only when the request sets `page_text: true`. */
+  page_text?: string | null;
+}
+
+export interface SearchApiResponse {
+  /** Ranked pages */
+  results: SearchApiResult[];
+  /** Cost charged for this request in USD */
+  cost_usd: number;
+  /** Billable usage units for this request */
+  usage_count: number;
+  /** Pricing service used for the charge */
+  service: string;
+  /** Currency of `cost_usd` */
+  currency: string;
+}
+
+// ============================================================================
+// Network Stats Types
+// ============================================================================
+
+/** Per-second growth of each network counter. */
+export interface NetworkStatsRates {
+  total_searchable_pages: number;
+  searches_completed_today: number;
+  urls_crawled_today: number;
+}
+
+/** Public Desearch network counters. The current source is an estimate (`telemetry_kind`). */
+export interface NetworkStatsResponse {
+  total_searchable_pages: number;
+  searches_completed_today: number;
+  urls_crawled_today: number;
+  rates_per_second: NetworkStatsRates;
+  /** ISO 8601 timestamp */
+  started_at: string;
+  /** ISO 8601 timestamp of this snapshot */
+  updated_at: string;
+  /** `estimated` */
+  telemetry_kind?: string;
+  /** `fixed_rate_projection` */
+  methodology?: string;
+}
+
+/** One second of the network stats timeline. */
+export interface NetworkStatsHistoryPoint {
+  total_searchable_pages: number;
+  searches_completed_today: number;
+  urls_crawled_today: number;
+  /** ISO 8601 timestamp */
+  observed_at: string;
+  /** `estimated` */
+  telemetry_kind?: string;
+  /** `fixed_rate_projection` */
+  methodology?: string;
+}
+
+/** The latest 20 minutes of network stats, one point per second. */
+export interface NetworkStatsHistoryResponse {
+  window_seconds: number;
+  interval_seconds: number;
+  /** ISO 8601 timestamp */
+  window_started_at: string;
+  /** ISO 8601 timestamp */
+  window_ended_at: string;
+  points: NetworkStatsHistoryPoint[];
+}
+
+/** Options for `streamNetworkStats`. */
+export interface StreamNetworkStatsOptions {
+  /**
+   * The `id` of the last event you read. Sent as the `Last-Event-ID` header, so the stream first
+   * replays the snapshots you missed (up to 20 minutes) and then continues live.
+   */
+  lastEventId?: string | number | null;
+  /** Stops the stream. The loop then ends without an error. */
+  signal?: AbortSignal;
+}
+
+/** One `stats` event of the network stats stream. */
+export interface NetworkStatsStreamEvent {
+  /** SSE event id (the snapshot time in unix seconds). Pass it as `lastEventId` to resume. */
+  id: string | null;
+  /** The snapshot: the same JSON as `networkStats()` */
+  data: NetworkStatsResponse;
 }
 
 // ============================================================================

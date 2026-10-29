@@ -7,6 +7,9 @@ import Desearch, {
   unverifiedCriteria,
 } from './index';
 import type {
+  InstagramSearchResultType,
+  NetworkStatsResponse,
+  NetworkStatsStreamEvent,
   PeopleCompletionReason,
   PeopleCriterionCheck,
   PeopleCriterionVerdict,
@@ -14,6 +17,8 @@ import type {
   PeopleTaskWarning,
   Person,
   PersonAttributes,
+  SearchApiMode,
+  TikTokPost,
 } from './index';
 
 vi.mock('undici', () => ({
@@ -1166,5 +1171,777 @@ describe('People Search', () => {
     expect(typeof typed).toBe('function');
     expect(typeof tiktok).toBe('function');
     expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('Social routes (TikTok, Facebook, Instagram)', () => {
+  const API = 'https://api.desearch.ai';
+  const PAGE = { count: 3, cursor: 'c1' };
+
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  it.each([
+    {
+      name: 'tiktokSearch',
+      call: (c: Desearch) =>
+        c.tiktokSearch({ query: 'bittensor', count: 3, sort: 'latest' }),
+      path: '/desearch/tiktok/search',
+      body: { query: 'bittensor', count: 3, sort: 'latest' },
+    },
+    {
+      name: 'facebookSearch',
+      call: (c: Desearch) => c.facebookSearch({ query: 'running shoes' }),
+      path: '/desearch/facebook/search',
+      body: { query: 'running shoes' },
+    },
+    {
+      name: 'instagramSearch',
+      call: (c: Desearch) => c.instagramSearch({ query: 'nasa', count: 2 }),
+      path: '/desearch/instagram/search',
+      body: { query: 'nasa', count: 2 },
+    },
+  ])('$name posts its JSON body to $path', async ({ call, path, body }) => {
+    mockResponse({ body: [] });
+
+    const client = new Desearch('test-key');
+    await expect(call(client)).resolves.toEqual([]);
+
+    const sent = fetchCall(0);
+    expect(sent.url).toBe(`${API}${path}`);
+    expect(sent.method).toBe('POST');
+    expect(sent.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(sent.body!)).toEqual(body);
+  });
+
+  it.each([
+    {
+      name: 'tiktokPostById',
+      call: (c: Desearch) => c.tiktokPostById({ id: '7637904247849372948' }),
+      url: '/desearch/tiktok/post/7637904247849372948',
+    },
+    {
+      name: 'tiktokProfile',
+      call: (c: Desearch) => c.tiktokProfile({ username: 'tiktok' }),
+      url: '/desearch/tiktok/profile/tiktok',
+    },
+    {
+      name: 'tiktokProfilePosts',
+      call: (c: Desearch) =>
+        c.tiktokProfilePosts({ username: 'tiktok', ...PAGE }),
+      url: '/desearch/tiktok/profile/tiktok/posts?count=3&cursor=c1',
+    },
+    {
+      name: 'tiktokComments',
+      call: (c: Desearch) =>
+        c.tiktokComments({ video_id: '7637904247849372948', ...PAGE }),
+      url: '/desearch/tiktok/comments/7637904247849372948?count=3&cursor=c1',
+    },
+    {
+      name: 'tiktokHashtag',
+      call: (c: Desearch) => c.tiktokHashtag({ tag: 'ai', ...PAGE }),
+      url: '/desearch/tiktok/hashtag/ai?count=3&cursor=c1',
+    },
+    {
+      name: 'tiktokTrending',
+      call: (c: Desearch) => c.tiktokTrending({ region: 'GB', count: 2 }),
+      url: '/desearch/tiktok/trending?region=GB&count=2',
+    },
+    {
+      name: 'tiktokTrending (no params)',
+      call: (c: Desearch) => c.tiktokTrending(),
+      url: '/desearch/tiktok/trending',
+    },
+    {
+      name: 'facebookPostById',
+      call: (c: Desearch) => c.facebookPostById({ id: '1040495851972958' }),
+      url: '/desearch/facebook/post/1040495851972958',
+    },
+    {
+      name: 'facebookProfile',
+      call: (c: Desearch) => c.facebookProfile({ profile_id: 'facebook' }),
+      url: '/desearch/facebook/profile/facebook',
+    },
+    {
+      name: 'facebookProfilePosts',
+      call: (c: Desearch) =>
+        c.facebookProfilePosts({ profile_id: 'facebook', ...PAGE }),
+      url: '/desearch/facebook/profile/facebook/posts?count=3&cursor=c1',
+    },
+    {
+      name: 'facebookComments',
+      call: (c: Desearch) =>
+        c.facebookComments({ post_id: '1040495851972958', ...PAGE }),
+      url: '/desearch/facebook/comments/1040495851972958?count=3&cursor=c1',
+    },
+    {
+      name: 'facebookHashtag',
+      call: (c: Desearch) => c.facebookHashtag({ tag: 'ai', ...PAGE }),
+      url: '/desearch/facebook/hashtag/ai?count=3&cursor=c1',
+    },
+    {
+      name: 'instagramMedia',
+      call: (c: Desearch) => c.instagramMedia({ id: 'DeuOR-CjKE9' }),
+      url: '/desearch/instagram/media/DeuOR-CjKE9',
+    },
+    {
+      name: 'instagramProfile',
+      call: (c: Desearch) => c.instagramProfile({ username: 'instagram' }),
+      url: '/desearch/instagram/profile/instagram',
+    },
+    {
+      name: 'instagramProfilePosts',
+      call: (c: Desearch) =>
+        c.instagramProfilePosts({ username: 'instagram', ...PAGE }),
+      url: '/desearch/instagram/profile/instagram/posts?count=3&cursor=c1',
+    },
+    {
+      name: 'instagramComments',
+      call: (c: Desearch) =>
+        c.instagramComments({ shortcode: 'DeuOR-CjKE9', ...PAGE }),
+      url: '/desearch/instagram/comments/DeuOR-CjKE9?count=3&cursor=c1',
+    },
+    {
+      name: 'instagramHashtag',
+      call: (c: Desearch) => c.instagramHashtag({ tag: 'ai', ...PAGE }),
+      url: '/desearch/instagram/hashtag/ai?count=3&cursor=c1',
+    },
+  ])('$name sends GET $url', async ({ call, url }) => {
+    const payload = { id: '1' };
+    mockResponse({ body: payload });
+
+    const client = new Desearch('test-key');
+    await expect(call(client)).resolves.toEqual(payload);
+
+    const sent = fetchCall(0);
+    expect(sent.url).toBe(`${API}${url}`);
+    expect(sent.method).toBe('GET');
+    expect(sent.body).toBeUndefined();
+    expect(sent.headers).toEqual({ Authorization: 'test-key' });
+  });
+
+  it('leaves unset count and cursor out of the query and the path params out of it entirely', async () => {
+    mockResponse({ body: [] });
+    mockResponse({ body: [] });
+
+    const client = new Desearch('test-key');
+    await client.instagramHashtag({ tag: 'ai' });
+    await client.facebookComments({ post_id: '1', count: 5, cursor: null });
+
+    expect(fetchCall(0).url).toBe(`${API}/desearch/instagram/hashtag/ai`);
+    expect(fetchCall(1).url).toBe(
+      `${API}/desearch/facebook/comments/1?count=5`
+    );
+  });
+
+  it('URL-encodes path params, so IDs and post URLs that contain / reach the {id:path} routes as one value', async () => {
+    for (let i = 0; i < 6; i += 1) {
+      mockResponse({ body: {} });
+    }
+
+    const client = new Desearch('test-key');
+    const fbId = 'Meta/posts/1040495851972958';
+    const igUrl = 'https://www.instagram.com/reel/DYMavICJUCU/';
+    const ttUrl = 'https://www.tiktok.com/@tiktok/video/7637904247849372948';
+    await client.facebookPostById({ id: fbId });
+    await client.facebookComments({ post_id: fbId });
+    await client.instagramMedia({ id: igUrl });
+    await client.tiktokPostById({ id: ttUrl });
+    await client.tiktokComments({ video_id: ttUrl, count: 1 });
+    await client.tiktokProfile({ username: 'a?b#c d' });
+
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/facebook/post/Meta%2Fposts%2F1040495851972958`,
+      `${API}/desearch/facebook/comments/Meta%2Fposts%2F1040495851972958`,
+      `${API}/desearch/instagram/media/https%3A%2F%2Fwww.instagram.com%2Freel%2FDYMavICJUCU%2F`,
+      `${API}/desearch/tiktok/post/https%3A%2F%2Fwww.tiktok.com%2F%40tiktok%2Fvideo%2F7637904247849372948`,
+      `${API}/desearch/tiktok/comments/https%3A%2F%2Fwww.tiktok.com%2F%40tiktok%2Fvideo%2F7637904247849372948?count=1`,
+      `${API}/desearch/tiktok/profile/a%3Fb%23c%20d`,
+    ]);
+    // The server decodes the path before routing: each value arrives unchanged.
+    const lastSegment = (index: number) =>
+      decodeURIComponent(
+        new URL(fetchCall(index).url).pathname.split('/').pop()!
+      );
+    expect(lastSegment(0)).toBe(fbId);
+    expect(lastSegment(2)).toBe(igUrl);
+    expect(lastSegment(3)).toBe(ttUrl);
+    expect(lastSegment(5)).toBe('a?b#c d');
+    expect(new URL(fetchCall(5).url).search).toBe('');
+  });
+
+  it('sends a cursor back exactly as received, in the query of GET routes and the body of searches', async () => {
+    const cursor =
+      'eyJ2IjoxLCJyb3V0ZSI6Ii9kZXNlYXJjaC90aWt0b2svaGFzaHRhZyJ9.c2ln-_=';
+    mockResponse({ body: [] });
+    mockResponse({ body: [] });
+    mockResponse({ body: [] });
+
+    const client = new Desearch('test-key');
+    await client.tiktokHashtag({ tag: 'ai', cursor });
+    await client.tiktokSearch({ query: 'ai', count: 2, cursor });
+    await client.facebookSearch({ query: 'ai', cursor });
+
+    expect(new URL(fetchCall(0).url).searchParams.get('cursor')).toBe(cursor);
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({
+      query: 'ai',
+      count: 2,
+      cursor,
+    });
+    expect(JSON.parse(fetchCall(2).body!).cursor).toBe(cursor);
+  });
+
+  it('returns the raw array by default even when a next cursor is present', async () => {
+    const posts: TikTokPost[] = [{ id: '1', hashtags: ['ai'], mentions: [] }];
+    mockResponse({
+      body: posts,
+      headers: { 'x-desearch-next-cursor': 'next-1' },
+    });
+
+    const client = new Desearch('test-key');
+    await expect(client.tiktokHashtag({ tag: 'ai' })).resolves.toEqual(posts);
+  });
+
+  it('returns nextCursor and cost metadata from the headers when opted in', async () => {
+    const posts = [{ id: '1' }, { id: '2' }];
+    mockResponse({
+      body: posts,
+      headers: {
+        'X-Desearch-Cost-Usd': '0.002',
+        'X-Desearch-Usage-Count': '2',
+        'X-Desearch-Service': 'tiktok',
+        'X-Desearch-Currency': 'USD',
+        'x-desearch-next-cursor': 'eyJ2IjoxfQ.c2ln',
+      },
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.tiktokProfilePosts(
+        { username: 'tiktok', count: 2 },
+        { includeMetadata: true }
+      )
+    ).resolves.toEqual({
+      data: posts,
+      metadata: {
+        costUsd: 0.002,
+        usageCount: 2,
+        service: 'tiktok',
+        currency: 'USD',
+        nextCursor: 'eyJ2IjoxfQ.c2ln',
+      },
+    });
+  });
+
+  it('leaves nextCursor out on the last page and when the header is empty', async () => {
+    mockResponse({ body: [], headers: { 'X-Desearch-Usage-Count': '0' } });
+    mockResponse({ body: [], headers: { 'x-desearch-next-cursor': '' } });
+
+    const client = new Desearch('test-key');
+    const last = await client.instagramComments(
+      { shortcode: 'DeuOR-CjKE9' },
+      { includeMetadata: true }
+    );
+    const empty = await client.facebookHashtag(
+      { tag: 'ai' },
+      { includeMetadata: true }
+    );
+
+    expect(last.metadata).toEqual({ usageCount: 0 });
+    expect('nextCursor' in last.metadata).toBe(false);
+    expect(empty.metadata).toEqual({});
+  });
+
+  it('pages through a list route by following nextCursor until it is absent', async () => {
+    mockResponse({
+      body: [{ id: 'a' }, { id: 'b' }],
+      headers: { 'x-desearch-next-cursor': 'cur-1' },
+    });
+    mockResponse({
+      body: [{ id: 'c' }],
+      headers: { 'x-desearch-next-cursor': 'cur-2' },
+    });
+    mockResponse({ body: [{ id: 'd' }] });
+
+    const client = new Desearch('test-key');
+    const ids: (string | null | undefined)[] = [];
+    let cursor: string | undefined;
+    do {
+      const { data, metadata } = await client.instagramProfilePosts(
+        { username: 'instagram', count: 2, cursor },
+        { includeMetadata: true }
+      );
+      ids.push(...data.map((media) => media.id));
+      cursor = metadata.nextCursor;
+    } while (cursor);
+
+    expect(ids).toEqual(['a', 'b', 'c', 'd']);
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/instagram/profile/instagram/posts?count=2`,
+      `${API}/desearch/instagram/profile/instagram/posts?count=2&cursor=cur-1`,
+      `${API}/desearch/instagram/profile/instagram/posts?count=2&cursor=cur-2`,
+    ]);
+  });
+
+  it('returns typed objects for the single-item routes', async () => {
+    const profile = {
+      id: '107955',
+      username: 'tiktok',
+      nickname: 'TikTok',
+      verified: true,
+      followers: 90000000,
+      heart: 400000000,
+    };
+    const media = {
+      id: '3234567890123456789',
+      shortcode: 'DY79rTVS6OK',
+      url: 'https://www.instagram.com/p/DY79rTVS6OK/',
+      mediaType: 'image',
+      author: { username: 'instagram', verified: true },
+      stats: { likeCount: 5000, commentCount: 120 },
+      hashtags: [],
+      mentions: [],
+      children: [],
+    };
+    mockResponse({ body: profile });
+    mockResponse({ body: media });
+
+    const client = new Desearch('test-key');
+    const tt = await client.tiktokProfile({ username: 'tiktok' });
+    const ig = await client.instagramMedia({ id: 'DY79rTVS6OK' });
+    expect(tt.followers).toBe(90000000);
+    expect(ig.author?.username).toBe('instagram');
+    expect(ig.stats?.likeCount).toBe(5000);
+  });
+
+  it('surfaces an invalid cursor (422), a missing post (404) and a failed search as HTTP errors', async () => {
+    mockResponse({
+      body: '{"detail":"Invalid request parameters"}',
+      ok: false,
+      status: 422,
+    });
+    mockResponse({
+      body: '{"detail":"Post not found"}',
+      ok: false,
+      status: 404,
+    });
+    mockResponse({
+      body: '{"detail":"cursor is not supported on instagram search"}',
+      ok: false,
+      status: 422,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.tiktokComments({ video_id: '1', cursor: 'tampered' })
+    ).rejects.toThrow('HTTP 422: {"detail":"Invalid request parameters"}');
+    await expect(
+      client.instagramComments({ shortcode: '3234567890123456789' })
+    ).rejects.toThrow('HTTP 404: {"detail":"Post not found"}');
+    await expect(client.instagramSearch({ query: 'nasa' })).rejects.toThrow(
+      'HTTP 422: {"detail":"cursor is not supported on instagram search"}'
+    );
+  });
+
+  it('wraps a transport failure as Unexpected Error', async () => {
+    mockedFetch.mockRejectedValueOnce(new Error('socket hang up'));
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.facebookProfile({ profile_id: 'facebook' })
+    ).rejects.toThrow('Unexpected Error: socket hang up');
+  });
+
+  it('types the social requests to what each route accepts', () => {
+    const client = new Desearch('test-key');
+    // Type-only checks: these calls are never awaited or sent.
+    const igSearch = () =>
+      client.instagramSearch({
+        query: 'nasa',
+        // @ts-expect-error Instagram search does not paginate
+        cursor: 'c1',
+      });
+    const trending = () =>
+      client.tiktokTrending({
+        region: 'US',
+        // @ts-expect-error TikTok trending has no cursor
+        cursor: 'c1',
+      });
+    // @ts-expect-error a profile lookup needs its username
+    const profile = () => client.tiktokProfile({});
+    const kind: InstagramSearchResultType = 'hashtag';
+    // @ts-expect-error result types are profile, hashtag or media
+    const badKind: InstagramSearchResultType = 'reel';
+    expect([igSearch, trending, profile, kind, badKind]).toHaveLength(5);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('Search API', () => {
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  const response = {
+    results: [
+      {
+        url: 'https://www.nobelprize.org/prizes/physics/2024/summary/',
+        title: 'The Nobel Prize in Physics 2024',
+        published_date: '2024-10-08',
+        highlights: ['John J. Hopfield and Geoffrey Hinton'],
+      },
+    ],
+    cost_usd: 0.004,
+    usage_count: 1,
+    service: 'search',
+    currency: 'USD',
+  };
+
+  it('posts the request to /search and returns ranked results with their cost', async () => {
+    mockResponse({ body: response });
+
+    const client = new Desearch('test-key');
+    const payload = {
+      query: 'Who won the 2024 Nobel Prize in Physics?',
+      mode: 'fast' as const,
+      count: 15,
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+      highlights: true,
+      page_text: false,
+    };
+    const result = await client.searchApi(payload);
+    expect(result).toEqual(response);
+    expect(result.results[0].highlights).toEqual([
+      'John J. Hopfield and Geoffrey Hinton',
+    ]);
+
+    const call = fetchCall(0);
+    expect(call.url).toBe('https://api.desearch.ai/search');
+    expect(call.method).toBe('POST');
+    expect(call.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(call.body!)).toEqual(payload);
+  });
+
+  it('returns header metadata when opted in and surfaces 503 as an HTTP error', async () => {
+    mockResponse({
+      body: response,
+      headers: {
+        'X-Desearch-Cost-Usd': '0.004',
+        'X-Desearch-Service': 'search',
+      },
+    });
+    mockResponse({
+      body: '{"detail":"Search unavailable."}',
+      ok: false,
+      status: 503,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.searchApi({ query: 'desearch' }, { includeMetadata: true })
+    ).resolves.toEqual({
+      data: response,
+      metadata: { costUsd: 0.004, service: 'search' },
+    });
+    await expect(client.searchApi({ query: 'desearch' })).rejects.toThrow(
+      'HTTP 503: {"detail":"Search unavailable."}'
+    );
+  });
+
+  it('types mode to fast or balanced', () => {
+    const mode: SearchApiMode = 'balanced';
+    // @ts-expect-error modes are fast or balanced
+    const bad: SearchApiMode = 'deep';
+    expect([mode, bad]).toHaveLength(2);
+  });
+});
+
+function networkStats(updatedAt: string): NetworkStatsResponse {
+  return {
+    total_searchable_pages: 1024383856,
+    searches_completed_today: 512895,
+    urls_crawled_today: 25484231,
+    rates_per_second: {
+      total_searchable_pages: 184,
+      searches_completed_today: 6,
+      urls_crawled_today: 296,
+    },
+    started_at: '2026-09-16T07:04:12Z',
+    updated_at: updatedAt,
+    telemetry_kind: 'estimated',
+    methodology: 'fixed_rate_projection',
+  };
+}
+
+/** A ReadableStream body made of text or byte chunks; `open` keeps it from closing. */
+function sseBody(
+  chunks: (string | Uint8Array)[],
+  { open = false }: { open?: boolean } = {}
+) {
+  const encoder = new TextEncoder();
+  const state = {
+    cancelled: false,
+    controller: undefined as
+      | ReadableStreamDefaultController<Uint8Array>
+      | undefined,
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      state.controller = controller;
+      for (const chunk of chunks) {
+        controller.enqueue(
+          typeof chunk === 'string' ? encoder.encode(chunk) : chunk
+        );
+      }
+      if (!open) {
+        controller.close();
+      }
+    },
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return { stream, state };
+}
+
+function mockStreamResponse(
+  body: ReadableStream<Uint8Array> | null,
+  { ok = true, status = 200, text = '' } = {}
+) {
+  mockedFetch.mockResolvedValueOnce({
+    ok,
+    status,
+    headers: { get: () => 'text/event-stream' },
+    body,
+    text: vi.fn().mockResolvedValue(text),
+  } as any);
+}
+
+function sse(id: number, stats: NetworkStatsResponse) {
+  return `id: ${id}\nevent: stats\ndata: ${JSON.stringify(stats)}\n\n`;
+}
+
+async function collect(
+  iterator: AsyncIterable<NetworkStatsStreamEvent>
+): Promise<NetworkStatsStreamEvent[]> {
+  const events: NetworkStatsStreamEvent[] = [];
+  for await (const event of iterator) {
+    events.push(event);
+  }
+  return events;
+}
+
+describe('Network stats', () => {
+  const API = 'https://api.desearch.ai';
+
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  it('gets the stats and the 20-minute history without sending the API key', async () => {
+    const stats = networkStats('2026-10-28T10:00:00Z');
+    const history = {
+      window_seconds: 1200,
+      interval_seconds: 1,
+      window_started_at: '2026-10-28T09:40:00Z',
+      window_ended_at: '2026-10-28T10:00:00Z',
+      points: [
+        {
+          total_searchable_pages: 1024383856,
+          searches_completed_today: 512895,
+          urls_crawled_today: 25484231,
+          observed_at: '2026-10-28T09:40:00Z',
+          telemetry_kind: 'estimated',
+          methodology: 'fixed_rate_projection',
+        },
+      ],
+    };
+    mockResponse({ body: stats });
+    mockResponse({ body: history });
+
+    const client = new Desearch('');
+    await expect(client.networkStats()).resolves.toEqual(stats);
+    await expect(client.networkStatsHistory()).resolves.toEqual(history);
+
+    expect(fetchCall(0).url).toBe(`${API}/network/stats`);
+    expect(fetchCall(1).url).toBe(`${API}/network/stats/history`);
+    for (const index of [0, 1]) {
+      expect(fetchCall(index).method).toBe('GET');
+      expect(fetchCall(index).headers).toEqual({});
+      expect(fetchCall(index).body).toBeUndefined();
+    }
+  });
+
+  it('wraps network stats in { data, metadata } when opted in', async () => {
+    const stats = networkStats('2026-10-28T10:00:00Z');
+    mockResponse({ body: stats });
+    mockResponse({ body: '{"detail":"Not Found"}', ok: false, status: 404 });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.networkStats({ includeMetadata: true })
+    ).resolves.toEqual({ data: stats, metadata: {} });
+    await expect(client.networkStatsHistory()).rejects.toThrow(
+      'HTTP 404: {"detail":"Not Found"}'
+    );
+  });
+
+  it('streams stats events parsed from Server-Sent Events, across chunk boundaries', async () => {
+    const first = networkStats('2026-10-28T10:00:00Z');
+    const second = networkStats('2026-10-28T10:00:01Z');
+    const third = networkStats('2026-10-28T10:00:02Z');
+    const wire = `: keep-alive\n\n${sse(1761645600, first)}${sse(
+      1761645601,
+      second
+    ).replace(/\n/g, '\r\n')}${sse(1761645602, third)}`;
+    // Split the wire at awkward places: inside a field, inside a CRLF, between events.
+    const crlf = wire.indexOf('\r\n');
+    const { stream } = sseBody([
+      wire.slice(0, 7),
+      wire.slice(7, crlf + 1),
+      wire.slice(crlf + 1, crlf + 40),
+      wire.slice(crlf + 40),
+    ]);
+    mockStreamResponse(stream);
+
+    const client = new Desearch('test-key');
+    const events = await collect(client.streamNetworkStats());
+
+    expect(events).toEqual([
+      { id: '1761645600', data: first },
+      { id: '1761645601', data: second },
+      { id: '1761645602', data: third },
+    ]);
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/network/stats/stream`);
+    expect(call.method).toBe('GET');
+    expect(call.headers).toEqual({ Accept: 'text/event-stream' });
+  });
+
+  it('joins multi-line data, decodes UTF-8 split across chunks, skips other events and drops an unfinished one', async () => {
+    const stats = networkStats('2026-10-28T10:00:00Z');
+    const json = JSON.stringify({ ...stats, methodology: 'café' });
+    // Split the JSON after its first value, where a newline is only whitespace.
+    const split = json.indexOf(',') + 1;
+    const bytes = new TextEncoder().encode(
+      `event: ping\ndata: {}\n\nid: 7\nevent: stats\ndata: ${json.slice(
+        0,
+        split
+      )}\ndata:${json.slice(
+        split
+      )}\n\nretry: 1000\nevent: stats\ndata: {"partial":`
+    );
+    const accent = bytes.indexOf(0xc3);
+    const { stream } = sseBody([
+      bytes.slice(0, accent + 1),
+      bytes.slice(accent + 1),
+    ]);
+    mockStreamResponse(stream);
+
+    const client = new Desearch('test-key');
+    const events = await collect(client.streamNetworkStats());
+
+    // data lines join with \n, which JSON ignores between tokens.
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe('7');
+    expect(events[0].data.methodology).toBe('café');
+    expect(events[0].data.urls_crawled_today).toBe(stats.urls_crawled_today);
+  });
+
+  it('sends Last-Event-ID to replay missed snapshots', async () => {
+    mockStreamResponse(sseBody([]).stream);
+    mockStreamResponse(sseBody([]).stream);
+
+    const client = new Desearch('test-key');
+    await collect(client.streamNetworkStats({ lastEventId: 1761645600 }));
+    await collect(client.streamNetworkStats({ lastEventId: '' }));
+
+    expect(fetchCall(0).headers).toEqual({
+      Accept: 'text/event-stream',
+      'Last-Event-ID': '1761645600',
+    });
+    expect(fetchCall(1).headers).toEqual({ Accept: 'text/event-stream' });
+  });
+
+  it('closes the connection when the caller breaks out of the loop', async () => {
+    const { stream, state } = sseBody(
+      [
+        sse(1, networkStats('2026-10-28T10:00:00Z')),
+        sse(2, networkStats('2026-10-28T10:00:01Z')),
+      ],
+      { open: true }
+    );
+    mockStreamResponse(stream);
+
+    const client = new Desearch('test-key');
+    const seen: (string | null)[] = [];
+    for await (const event of client.streamNetworkStats()) {
+      seen.push(event.id);
+      break;
+    }
+
+    expect(seen).toEqual(['1']);
+    expect(state.cancelled).toBe(true);
+  });
+
+  it('ends without an error when the signal aborts, before or during the stream', async () => {
+    const { stream, state } = sseBody(
+      [sse(1, networkStats('2026-10-28T10:00:00Z'))],
+      { open: true }
+    );
+    mockStreamResponse(stream);
+    const controller = new AbortController();
+    // undici errors the body when its request is aborted.
+    controller.signal.addEventListener('abort', () =>
+      state.controller?.error(new Error('This operation was aborted'))
+    );
+
+    const client = new Desearch('test-key');
+    const iterator = client.streamNetworkStats({ signal: controller.signal });
+    const first = await iterator.next();
+    expect(first.value).toMatchObject({ id: '1' });
+    controller.abort();
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    const init = mockedFetch.mock.calls[0][1] as { signal?: AbortSignal };
+    expect(init.signal).toBe(controller.signal);
+
+    const aborted = new AbortController();
+    aborted.abort();
+    mockedFetch.mockRejectedValueOnce(new Error('This operation was aborted'));
+    await expect(
+      collect(client.streamNetworkStats({ signal: aborted.signal }))
+    ).resolves.toEqual([]);
+  });
+
+  it('throws HTTP and Unexpected errors like the other methods', async () => {
+    mockStreamResponse(null, {
+      ok: false,
+      status: 503,
+      text: '{"detail":"Service Unavailable"}',
+    });
+    mockedFetch.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND'));
+    mockStreamResponse(sseBody(['event: stats\ndata: {not json\n\n']).stream);
+
+    const client = new Desearch('test-key');
+    await expect(collect(client.streamNetworkStats())).rejects.toThrow(
+      'HTTP 503: {"detail":"Service Unavailable"}'
+    );
+    await expect(collect(client.streamNetworkStats())).rejects.toThrow(
+      'Unexpected Error: getaddrinfo ENOTFOUND'
+    );
+    await expect(collect(client.streamNetworkStats())).rejects.toThrow(
+      /^Unexpected Error: /
+    );
   });
 });

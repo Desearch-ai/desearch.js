@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.0
+
+- Added Company Search and Company Enrich. Two billed methods start a background task: `companySearch` (companies found on the web from a description, with an AI fit score) and `companyEnrich` (the same data for up to 200 domains you send; `score` is null). Pass `idempotencyKey` to send an `Idempotency-Key` header.
+- Added the free company task methods: `listCompanyTasks` (`type` `search` or `enrich`, `status`, `limit`, `cursor`, `metadata`), `getCompanyTask`, `getCompanyResults`, `pauseCompanyTask`, `resumeCompanyTask`, `cancelCompanyTask` and `exportCompanyResults` (CSV or JSON Lines).
+- Added `waitForCompanyTask`, which polls a task until it ends (interval, timeout, `onProgress`), and `iterCompanyResults`, an async iterator over the companies themselves, page by page.
+- Added `CompanyTaskConflictError`. Company pause, resume and cancel throw it when the API refuses the action (HTTP 409), and it carries the current task.
+- Added the request, task and result types: `CompanySearchRequest`, `CompanySearchFilters`, `CompanyEnrichRequest`, `CompanyTask`, `CompanySearchTask`, `CompanyTaskList`, `CompanyResultsPage`, `Company` and its nested types (`CompanyEmail` with `CompanyEmailVerification` and `CompanyEmailChecks`, `CompanyPhone`, `CompanySocial`, `CompanyPage`, `CompanyLocation`, `CompanyPerson`, `CompanyPersonEvidence`, `CompanyPrimaryContact`, `CompanyContactCoverage`, `CompanyEnrichment`, `CompanyEnrichmentStages`, `CompanyEnrichmentError`, `CompanyScore`, `CompanyFoundBy`), `CompanyTaskWarning` and the literal unions the API documents. Result fields the later stages fill in are optional, and result objects keep fields a newer API adds.
+- `unverifiedCriteria(score)` also accepts a `CompanyScore`.
+
 ## 1.10.0
 
 - `ExtractParams.format` accepts `'markdown'`: `extract({ url, format: 'markdown' })` returns the page as markdown (headings, lists, tables and code).

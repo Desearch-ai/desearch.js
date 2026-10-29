@@ -27,6 +27,8 @@ Status legend:
 | Retry / timeout / abort controls | ❌ | `fetch` call only uses `{ method, headers, body }` | No resilience or cancellation knobs are exposed for individual requests. |
 | People Search polling and pagination helpers | ✅ | `src/index.ts` `waitForPeopleTask`, `iterPeopleResultPages` | Polls a task with an interval and timeout; iterates results pages by `next_cursor`. No AbortSignal. |
 | People Search idempotent creates | ✅ | `src/index.ts` `peopleSearch` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
+| Company Search polling and iteration helpers | ✅ | `src/index.ts` `waitForCompanyTask`, `iterCompanyResults` | Polls a task with an interval and timeout; iterates companies by `next_cursor`. No AbortSignal. |
+| Company Search idempotent creates | ✅ | `src/index.ts` `companySearch`, `companyEnrich` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
 | Streaming AI responses | ❌ | `aiSearch` forces `streaming: false` | The SDK does not surface streamed results. |
 | Browser-first transport abstraction | ❌ | `import { fetch } from 'undici'` | Current transport choice is explicitly Node-oriented. |
 
@@ -64,6 +66,17 @@ Status legend:
 | `exportPeopleProfiles` | `GET /desearch/people/profiles/export` | ✅ | Free. CSV or JSON Lines text; accepts result filters. |
 | `waitForPeopleTask` | polls `GET /desearch/people/tasks/{task_id}` | ✅ | SDK helper. Resolves when the task ends; throws on timeout. |
 | `iterPeopleResultPages` | pages `GET /desearch/people/tasks/{task_id}/results` | ✅ | SDK helper. Async iterator over results pages. |
+| `companySearch` | `POST /desearch/companies/search` | ✅ | Billed. Starts a Company Search task (HTTP 202). |
+| `companyEnrich` | `POST /desearch/companies/enrich` | ✅ | Billed. Starts a Company Enrich task for up to 200 domains. |
+| `listCompanyTasks` | `GET /desearch/companies/tasks` | ✅ | Free. `type` (`search`, `enrich`); `status` arrays are sent comma-separated; `metadata` pairs are sent as `metadata.<key>=<value>`; cursor pagination. |
+| `getCompanyTask` | `GET /desearch/companies/tasks/{task_id}` | ✅ | Free. Status, stage (including `enriching`), progress and cost of one task. |
+| `getCompanyResults` | `GET /desearch/companies/tasks/{task_id}/results` | ✅ | Free. One page of companies with `next_cursor` and `has_more`; companies already read are filled in place by later stages. |
+| `pauseCompanyTask` | `POST /desearch/companies/tasks/{task_id}/pause` | ✅ | Free. Throws `CompanyTaskConflictError` on 409. |
+| `resumeCompanyTask` | `POST /desearch/companies/tasks/{task_id}/resume` | ✅ | Free. Throws `CompanyTaskConflictError` on 409. |
+| `cancelCompanyTask` | `POST /desearch/companies/tasks/{task_id}/cancel` | ✅ | Free. Throws `CompanyTaskConflictError` on 409. |
+| `exportCompanyResults` | `GET /desearch/companies/tasks/{task_id}/export` | ✅ | Free. CSV (default) or JSON Lines text. |
+| `waitForCompanyTask` | polls `GET /desearch/companies/tasks/{task_id}` | ✅ | SDK helper. Resolves when the task ends; throws on timeout. |
+| `iterCompanyResults` | pages `GET /desearch/companies/tasks/{task_id}/results` | ✅ | SDK helper. Async iterator over the companies, page by page. |
 
 ## Request and response type coverage
 
@@ -97,6 +110,14 @@ Status legend:
 - ✅ `PeopleResultFilters` (`has`, `min_audience`, `max_audience`, `min_score`, `location`, `verified`)
 - ✅ `PeopleTaskParams`, `ListPeopleTasksParams`, `GetPeopleResultsParams`, `ExportPeopleResultsParams`, `ListPeopleProfilesParams`, `ExportPeopleProfilesParams`, `WaitForPeopleTaskOptions`
 
+### Company Search request types
+
+- ✅ `CompanySearchRequest` (`query`, `count`, `min_score`, `exclude`, `roles`, `infer_emails`, `verify_emails`, `filters`, `metadata`), `CompanySearchFilters` (`countries`, `require`)
+- ✅ `CompanyEnrichRequest` (`domains`, `roles`, `infer_emails`, `verify_emails`, `metadata`)
+- ✅ `CompanyRole`, `CompanyRequirement`, `CompanyTaskType`
+- ✅ `CompanyTaskParams`, `ListCompanyTasksParams`, `GetCompanyResultsParams`, `ExportCompanyResultsParams`, `WaitForCompanyTaskOptions`
+- ✅ `PeopleSearchOptions` (`idempotencyKey`) is shared by the company create calls
+
 ### Response types
 
 - ⚠️ `AiSearchResponse` is intentionally broad: `ResponseData | Record<string, unknown> | string`
@@ -112,6 +133,8 @@ Status legend:
 - ✅ `PeopleCriterionCheck`, `PeopleCriterionVerdict` (score `criteria_checks`, `fully_verified`)
 - ✅ `PersonAttributes`, `PeopleEnrichmentError` (`attributes.enrichment`, `attributes.enrichment_error`)
 - ✅ `PeopleResultsPage`, `PeopleProfile`, `PersonFoundBy`, `PeopleProfilesPage`
+- ✅ `CompanyTask`, `CompanySearchTask` (task plus reservation cost fields), `CompanyTaskList`, `CompanyTaskConflictResponse`, `CompanyTaskWarning`, `CompanyCompletionReason`, `CompanyTaskStage`, `CompanySearchType`, `CompanyPlatform`; statuses, links and `created_by` reuse the People Search types
+- ✅ `Company`, `CompanyEmail`, `CompanyEmailVerification`, `CompanyEmailChecks`, `CompanyPhone`, `CompanySocial`, `CompanyPage`, `CompanyLocation`, `CompanyPerson`, `CompanyPersonEvidence`, `CompanyPrimaryContact`, `CompanyContactCoverage`, `CompanyEnrichment`, `CompanyEnrichmentStages`, `CompanyEnrichmentError`, `CompanyScore` (its `criteria_checks` are `PeopleCriterionCheck`), `CompanyFoundBy`, `CompanyResultsPage`, plus the value unions (`CompanyEmailType`, `CompanyEmailVerificationStatus`, `CompanyContactSource`, `CompanyStageState`, ...). Result objects accept fields a newer API adds.
 
 ### Detailed X entity models
 
@@ -127,7 +150,8 @@ Status legend:
 - ✅ `MovedPermanentlyResponse`
 - ✅ `HTTPValidationError`
 - ✅ `ValidationError`
-- ✅ `PeopleTaskConflictError` (runtime class thrown by pause, resume and cancel on HTTP 409)
+- ✅ `PeopleTaskConflictError` (runtime class thrown by People Search pause, resume and cancel on HTTP 409)
+- ✅ `CompanyTaskConflictError` (runtime class thrown by company pause, resume and cancel on HTTP 409)
 
 ## Practical feature summary
 
@@ -135,6 +159,7 @@ Status legend:
 
 - typed wrappers for the current public read, search, and extraction endpoints
 - People Search across X, YouTube, LinkedIn and TikTok, with task control, polling and pagination helpers
+- Company Search and Company Enrich, with task control, a polling helper and a company iterator
 - one predictable request path across all public methods
 - Node-oriented HTTP transport through `undici`
 - CommonJS, ESM, and declaration output for package consumers
@@ -150,5 +175,5 @@ Status legend:
 
 - configurable transport options
 - runtime schema validation
-- write or mutation endpoints beyond People Search tasks
+- write or mutation endpoints beyond People Search and company tasks
 - a browser-first transport abstraction

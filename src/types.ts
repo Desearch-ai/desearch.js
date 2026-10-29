@@ -816,7 +816,7 @@ export interface TikTokCreatorSearchRequest extends PeopleSearchRequestBase {
   filters?: TikTokCreatorSearchFilters | null;
 }
 
-/** Options for the billed People Search create calls. */
+/** Options for the billed create calls of People Search, Company Search and Company Enrich. */
 export interface PeopleSearchOptions {
   /** Sent as the `Idempotency-Key` header. Retrying with the same key returns the original task and is not charged again. */
   idempotencyKey?: string;
@@ -1255,6 +1255,679 @@ export interface PeopleProfilesPage {
   total: number;
   /** Pass as `cursor` for the next page; null on the last page */
   next_cursor?: string | null;
+}
+
+// ============================================================================
+// Company Search Types
+// ============================================================================
+
+/** Which product a company task belongs to: Company Search (`search`) or Company Enrich (`enrich`). The `type` filter of `listCompanyTasks`. */
+export type CompanyTaskType = 'search' | 'enrich';
+
+/** Search type stored on a company task. */
+export type CompanySearchType = 'company_search' | 'company_enrich';
+
+/** The task's service: `company` (Company Search) or `company_enrich` (Company Enrich). */
+export type CompanyPlatform = 'company' | 'company_enrich';
+
+/**
+ * What a running company task is doing. `enriching`: every company is published and only the later
+ * stages of some of them (leaders, inferred emails, email checks) are left.
+ */
+export type CompanyTaskStage =
+  | 'planning'
+  | 'searching'
+  | 'processing'
+  | 'enriching'
+  | 'finalizing';
+
+/**
+ * A leader role to look for. A managing director (Geschäftsführer) counts as `ceo` when `ceo` is asked for.
+ */
+export type CompanyRole =
+  | 'ceo'
+  | 'founder'
+  | 'cto'
+  | 'cfo'
+  | 'coo'
+  | 'cmo'
+  | 'president'
+  | 'owner'
+  | 'managing_director';
+
+/**
+ * What a company must have to be delivered (`filters.require`), with the same names as `contact_coverage`:
+ * `email`, `phone`, `linkedin` (the company's LinkedIn page), `leader` (one of `roles`), `leader_email` (a leader with an email).
+ */
+export type CompanyRequirement =
+  | 'email'
+  | 'phone'
+  | 'linkedin'
+  | 'leader'
+  | 'leader_email';
+
+/** Where an email, phone or social profile came from. */
+export type CompanyContactSource =
+  | 'website'
+  | 'search'
+  | 'linkedin'
+  | 'inferred';
+
+/**
+ * The stages every company goes through, in order: its homepage (`profile`), its contact, about, team and
+ * imprint pages (`contacts`), its leaders (`people`), their inferred emails (`email_patterns`), then a check of
+ * every email (`email_check`).
+ */
+export type CompanyEnrichmentStage =
+  | 'profile'
+  | 'contacts'
+  | 'people'
+  | 'email_patterns'
+  | 'email_check';
+
+/**
+ * State of one stage of a company. `skipped`: turned off by the request (such as `infer_emails: false`),
+ * nothing to do, or cut by the task's time limit (`enrichment.errors` then says so).
+ */
+export type CompanyStageState = 'pending' | 'done' | 'failed' | 'skipped';
+
+/**
+ * Kind of email. `other` is a role address that is none of these, e.g. `license@`. Two names joined by `.`, `-`
+ * or `_` read as `personal`.
+ */
+export type CompanyEmailType =
+  | 'personal'
+  | 'leadership'
+  | 'sales'
+  | 'general'
+  | 'press'
+  | 'support'
+  | 'careers'
+  | 'legal'
+  | 'other';
+
+/**
+ * Result of an email check: `valid`; `invalid`; `risky` (catch-all domain, or no MX but an A record);
+ * `unknown` (nothing could confirm or refute it).
+ */
+export type CompanyEmailVerificationStatus =
+  | 'valid'
+  | 'invalid'
+  | 'risky'
+  | 'unknown';
+
+/** Kind of phone number. Fax numbers are left out. */
+export type CompanyPhoneType =
+  | 'main'
+  | 'sales'
+  | 'support'
+  | 'mobile'
+  | 'other';
+
+/** Kind of social profile. Share and intent links are left out. */
+export type CompanySocialType =
+  | 'linkedin'
+  | 'x'
+  | 'facebook'
+  | 'instagram'
+  | 'github'
+  | 'youtube'
+  | 'tiktok'
+  | 'crunchbase'
+  | 'discord'
+  | 'telegram'
+  | 'medium';
+
+/** Kind of page that was read. */
+export type CompanyPageType =
+  | 'home'
+  | 'contact'
+  | 'about'
+  | 'team'
+  | 'imprint'
+  | 'legal'
+  | 'other';
+
+export interface CompanySearchFilters {
+  /**
+   * Where the companies should be: ISO 3166-1 alpha-2 codes (`DE`) or country names. Scoring treats them as a
+   * location criterion. Up to 20.
+   */
+  countries?: string[] | null;
+  /**
+   * Only deliver companies that have all of these. A company is published once the stage that can show them has
+   * run (`email`, `phone`, `linkedin`: the contact pages; `leader`: the leaders; `leader_email`: the email checks).
+   * One that does not have them then is not delivered and not billed.
+   */
+  require?: CompanyRequirement[] | null;
+}
+
+/** Find companies from a description and collect their public contact data. */
+export interface CompanySearchRequest {
+  /** The companies you are looking for, in plain language: what they do, where, how far along (3-1000 characters). */
+  query: string;
+  /** How many companies to deliver (5-200, default 25). This many are reserved at the route price; only delivered companies are billed. */
+  count?: number;
+  /** Only deliver companies with at least this fit score (0-100). */
+  min_score?: number | null;
+  /**
+   * Companies to leave out, as domains or URLs, for example ones you already contacted (up to 1000). Each is
+   * reduced to its host without `www.`.
+   */
+  exclude?: string[] | null;
+  /** The leaders to look for (at least one). Default `['ceo', 'founder', 'cto', 'cfo']`. */
+  roles?: CompanyRole[];
+  /**
+   * Guess leaders' emails from the company's address pattern (for example `first.last`), learned from the
+   * addresses found on its site. Inferred emails say `source: 'inferred'` and a `confidence`. Default true.
+   */
+  infer_emails?: boolean;
+  /**
+   * Check every email: syntax, mail server (MX) and, for inferred ones, a web search. Each email then has a
+   * `verification`. Turn off to finish sooner without it. Default true.
+   */
+  verify_emails?: boolean;
+  /** Countries and contact requirements */
+  filters?: CompanySearchFilters | null;
+  /**
+   * Your own labels for this task, e.g. the workspace or campaign it belongs to.
+   * At most 10 keys; keys are 1-40 characters of a-z, 0-9, '_', '.' or '-'; values are strings of at most 200 characters.
+   * Returned as `metadata` on the task and usable as a `listCompanyTasks` filter. Never used by the task itself.
+   */
+  metadata?: Record<string, string> | null;
+}
+
+/** Collect public contact data for companies you already know, by domain. */
+export interface CompanyEnrichRequest {
+  /**
+   * 1-200 company domains or URLs, e.g. `acme.com` or `https://www.acme.com/about`. Each is reduced to its host
+   * without `www.` and lowercased; duplicates are removed and the task's `count` is the number left.
+   */
+  domains: string[];
+  /** The leaders to look for (at least one). Default `['ceo', 'founder', 'cto', 'cfo']`. */
+  roles?: CompanyRole[];
+  /** Guess leaders' emails from the company's address pattern. Default true. */
+  infer_emails?: boolean;
+  /** Check every email (syntax, MX and, for inferred ones, a web search). Default true. */
+  verify_emails?: boolean;
+  /**
+   * Your own labels for this task (same rules as Company Search). Returned as `metadata` on the task and usable
+   * as a `listCompanyTasks` filter. Never used by the task itself.
+   */
+  metadata?: Record<string, string> | null;
+}
+
+/** Identifies one Company Search or Company Enrich task. */
+export interface CompanyTaskParams {
+  /** The task ID returned when the task was created */
+  task_id: string;
+}
+
+export interface ListCompanyTasksParams {
+  /** Only Company Search (`search`) or only Company Enrich (`enrich`) tasks */
+  type?: CompanyTaskType | null;
+  /** Only tasks in these statuses; an array is sent comma-separated */
+  status?: PeopleTaskStatus | PeopleTaskStatus[] | null;
+  /** Page size (1-100, default 20) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+  /**
+   * Only tasks whose `metadata` has all of these key/value pairs (exact match, at most 3).
+   * Each pair is sent as a `metadata.<key>=<value>` query parameter. Keep the same filter when you page with `cursor`.
+   */
+  metadata?: Record<string, string> | null;
+}
+
+export interface GetCompanyResultsParams extends CompanyTaskParams {
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+  /** Page size (1-500, default 100) */
+  limit?: number | null;
+}
+
+export interface ExportCompanyResultsParams extends CompanyTaskParams {
+  /** File format (default csv) */
+  format?: PeopleExportFormat;
+}
+
+/** Options for `waitForCompanyTask`. */
+export interface WaitForCompanyTaskOptions {
+  /** Milliseconds between polls. Default 5000. */
+  intervalMs?: number;
+  /** Milliseconds to wait before giving up with an error. Default 600000 (10 minutes). */
+  timeoutMs?: number;
+  /** Called with the task after every poll, including the last one. */
+  onProgress?: (task: CompanyTask) => void;
+}
+
+/**
+ * Why a company task ended. `null` on the task while it is queued, running or paused.
+ *
+ * - `count_reached`: it delivered `count` companies.
+ * - `all_domains_processed` (Company Enrich): it read every domain.
+ * - `rounds_exhausted`: it ran every search it planned and delivered fewer than `count`.
+ * - `no_candidates`: its searches found no company to check.
+ * - `zero_qualified`: it checked the companies its searches found and none fit.
+ * - `candidate_budget`: it checked as many candidates as a task of this `count` may.
+ * - `cost_limit`: what searching cost reached what its results would bill, so it stopped.
+ * - `time_limit`: it ran for its maximum time.
+ * - `cancelled`: it was cancelled.
+ * - `failed`: an error ended it.
+ */
+export type CompanyCompletionReason =
+  | 'count_reached'
+  | 'all_domains_processed'
+  | 'rounds_exhausted'
+  | 'no_candidates'
+  | 'zero_qualified'
+  | 'candidate_budget'
+  | 'cost_limit'
+  | 'time_limit'
+  | 'cancelled'
+  | 'failed';
+
+/** Something that made part of a company task less reliable without failing it. */
+export interface CompanyTaskWarning {
+  /** What happened, e.g. `enrichment_time_limit` */
+  code:
+    | 'planning_fallback'
+    | 'ai_scoring_unavailable'
+    | 'enrichment_time_limit'
+    | 'linkedin_verification_unavailable'
+    | (string & {});
+  /** Human-readable summary */
+  message?: string | null;
+  [key: string]: unknown;
+}
+
+/** A Company Search or Company Enrich task. Poll it until `status` is completed, partial, failed or cancelled. */
+export interface CompanyTask {
+  /** Task ID (UUID) */
+  task_id: string;
+  /** `company_search` or `company_enrich` */
+  search_type: CompanySearchType;
+  /** The task's service: `company` (Company Search) or `company_enrich` (Company Enrich) */
+  platform: CompanyPlatform;
+  /** Current status (the same statuses as People Search) */
+  status: PeopleTaskStatus;
+  /** What the task is doing now; `enriching` once every company is published and only later stages are left */
+  stage?: CompanyTaskStage | null;
+  /** Company Search: the description. Company Enrich: a short label of the domains, e.g. `acme.com, beta.io and 3 more`. */
+  query: string;
+  /** Companies asked for (Company Enrich: the domains left after deduplication) */
+  count: number;
+  /** Companies delivered so far */
+  result_count: number;
+  /**
+   * The normalized request. Company Search: `query`, `count`, `min_score`, `exclude`, `roles`, `infer_emails`,
+   * `verify_emails`, `filters`. Company Enrich: `domains`, `roles`, `infer_emails`, `verify_emails`.
+   */
+  request?: Record<string, unknown> | null;
+  /** The `metadata` sent when the task was created (`{}` when none) */
+  metadata: Record<string, string>;
+  /** Company Search: how the description was understood (criteria and the queries it ran) */
+  interpreted?: Record<string, unknown> | null;
+  /**
+   * Counters while the task runs: `candidates_found`, `candidates_processed`, `qualified`, `filtered` (companies
+   * left out, by reason: `unreachable`, `not_a_company`, `below_min_score`, `no_<requirement>`), `enrichment`
+   * (`published`, `complete`, `pending`, `failed`), `email_checks` (`checked`, `valid`, `invalid`, `risky`,
+   * `unknown`) and `stop_reason`, the worker's internal reason for stopping. Prefer `completion_reason` and
+   * `coverage_limited`.
+   */
+  progress: Record<string, unknown>;
+  /** Errors the task ran into */
+  errors: unknown[];
+  /** Why the task ended; `null` while it is queued, running or paused */
+  completion_reason?: CompanyCompletionReason | null;
+  /**
+   * True when a budget (`completion_reason` `cost_limit`, `candidate_budget` or `time_limit`) stopped the task
+   * before it reached `count`: there may be more matching companies than it returned. `status` is still
+   * `completed` in that case.
+   */
+  coverage_limited?: boolean;
+  /** What made part of the task less reliable without failing it (`[]` when nothing did) */
+  warnings?: CompanyTaskWarning[];
+  /** Amount reserved when the task was created, in USD */
+  reserved_cost_usd: number;
+  /** Final cost once the task has ended, in USD. The rest of the reservation is returned. */
+  final_cost_usd?: number | null;
+  /** Amount returned from the reservation, in USD */
+  refunded_usd?: number | null;
+  /** Who created the task */
+  created_by?: PeopleTaskCreatedBy | null;
+  /** Creation timestamp (ISO 8601) */
+  created_at: string;
+  /** Start timestamp (ISO 8601) */
+  started_at?: string | null;
+  /** Pause timestamp (ISO 8601) */
+  paused_at?: string | null;
+  /** End timestamp (ISO 8601) */
+  finished_at?: string | null;
+  /** When the results expire (ISO 8601), 30 days after the task ends */
+  results_expire_at?: string | null;
+  /** API paths for this task (under `/desearch/companies/tasks`) */
+  links?: PeopleTaskLinks | null;
+}
+
+/** The task returned by `companySearch` and `companyEnrich`, with what the call reserved. */
+export interface CompanySearchTask
+  extends CompanyTask,
+    DesearchCostMetadataBodyFields {}
+
+export interface CompanyTaskList {
+  /** Tasks, newest first */
+  tasks: CompanyTask[];
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+/** 409 body of pause, resume and cancel: why the action was refused, and the task as it is now. */
+export interface CompanyTaskConflictResponse {
+  /** Why the action is not allowed */
+  detail: string;
+  /** The task in its current state */
+  task: CompanyTask;
+}
+
+/** What the email checks found. */
+export interface CompanyEmailChecks {
+  /** Whether the address is well formed */
+  syntax?: boolean | null;
+  /** Mail server: `ok`, `implicit` (no MX but an A record), `none`, `error` */
+  mx?: 'ok' | 'implicit' | 'none' | 'error' | null;
+  /** SMTP probe: `accepted`, `rejected`, `catch_all`, `unreachable`, `skipped` */
+  smtp?:
+    | 'accepted'
+    | 'rejected'
+    | 'catch_all'
+    | 'unreachable'
+    | 'skipped'
+    | null;
+  /** Web search for an inferred address: `found`, `not_found`, `skipped` */
+  web?: 'found' | 'not_found' | 'skipped' | null;
+  [key: string]: unknown;
+}
+
+export interface CompanyEmailVerification {
+  /** `valid`, `invalid`, `risky` or `unknown` */
+  status?: CompanyEmailVerificationStatus | null;
+  /** The individual checks */
+  checks?: CompanyEmailChecks | null;
+  /** When the email was checked (ISO 8601) */
+  checked_at?: string | null;
+  [key: string]: unknown;
+}
+
+/** An email of the company or of one of its leaders. */
+export interface CompanyEmail {
+  /** The address */
+  value: string;
+  /** Kind of address */
+  type?: CompanyEmailType | null;
+  /** Where it came from (`inferred`: guessed from the company's address pattern) */
+  source?: CompanyContactSource | null;
+  /** The page the email was found on (null when inferred) */
+  source_url?: string | null;
+  /** True when the address is on the company's domain */
+  on_domain?: boolean | null;
+  /** The person the address belongs to, when known */
+  person?: string | null;
+  /**
+   * Inferred emails only: `high` when the pattern was learned from this company's own addresses, `low` for a
+   * common pattern.
+   */
+  confidence?: 'high' | 'low' | null;
+  /** Inferred emails only: the pattern used, e.g. `first.last` */
+  pattern?: string | null;
+  /** Null until the email checks have run (or when `verify_emails` is false) */
+  verification?: CompanyEmailVerification | null;
+  [key: string]: unknown;
+}
+
+export interface CompanyPhone {
+  /** E.164 when the number parses, otherwise the digits as written */
+  value: string;
+  /** Kind of number */
+  type?: CompanyPhoneType | null;
+  /** Where it came from */
+  source?: CompanyContactSource | null;
+  /** The page the number was found on */
+  source_url?: string | null;
+  /** The number as written on the page */
+  raw?: string | null;
+  [key: string]: unknown;
+}
+
+export interface CompanySocial {
+  /** Kind of profile */
+  type: CompanySocialType;
+  /** Profile URL */
+  url: string;
+  /** Handle on the platform */
+  handle?: string | null;
+  /** Where it came from */
+  source?: CompanyContactSource | null;
+  /** The page the link was found on */
+  source_url?: string | null;
+  [key: string]: unknown;
+}
+
+/** A page of the company's site that was read. */
+export interface CompanyPage {
+  /** Kind of page */
+  type: CompanyPageType;
+  /** Page URL */
+  url: string;
+  [key: string]: unknown;
+}
+
+export interface CompanyLocation {
+  /** Country, e.g. `DE` */
+  country?: string | null;
+  /** City */
+  city?: string | null;
+  /** Street address */
+  address?: string | null;
+  [key: string]: unknown;
+}
+
+/** What shows a leader's role, and where. */
+export interface CompanyPersonEvidence {
+  /** The text that shows the role */
+  quote?: string | null;
+  /** Where the quote is */
+  source_url?: string | null;
+  /** Where it came from */
+  source?: 'website' | 'linkedin' | 'search' | null;
+  [key: string]: unknown;
+}
+
+/** A leader of the company. */
+export interface CompanyPerson {
+  /** Full name */
+  name: string;
+  /** Title as written, e.g. `Co-founder & CEO` */
+  title?: string | null;
+  /** Which of the request's `roles` this person holds */
+  roles: CompanyRole[];
+  /** LinkedIn profile URL */
+  linkedin_url?: string | null;
+  /** X profile URL */
+  x_url?: string | null;
+  /** GitHub profile URL */
+  github_url?: string | null;
+  /** The person's emails, found or inferred */
+  emails: CompanyEmail[];
+  /** The person's phone numbers */
+  phones: CompanyPhone[];
+  /** What shows the role, and where */
+  evidence?: CompanyPersonEvidence | null;
+  /** True when a quote on the company's own site or the person's current LinkedIn position shows the role */
+  verified?: boolean | null;
+  [key: string]: unknown;
+}
+
+/** The person to contact first. */
+export interface CompanyPrimaryContact {
+  /** Full name */
+  name?: string | null;
+  /** Title */
+  title?: string | null;
+  /** Email address */
+  email?: string | null;
+  /** LinkedIn profile URL */
+  linkedin_url?: string | null;
+  /** Why this person was picked */
+  reason?: string | null;
+  [key: string]: unknown;
+}
+
+/** What was found, with the same names as `filters.require`. */
+export interface CompanyContactCoverage {
+  email?: boolean | null;
+  phone?: boolean | null;
+  linkedin?: boolean | null;
+  leader?: boolean | null;
+  leader_email?: boolean | null;
+  [key: string]: unknown;
+}
+
+/** State of each stage: `pending`, `done`, `failed` or `skipped`. */
+export interface CompanyEnrichmentStages {
+  profile?: CompanyStageState | null;
+  contacts?: CompanyStageState | null;
+  people?: CompanyStageState | null;
+  email_patterns?: CompanyStageState | null;
+  email_check?: CompanyStageState | null;
+  [key: string]: unknown;
+}
+
+export interface CompanyEnrichmentError {
+  /** The stage that failed */
+  stage?: CompanyEnrichmentStage | (string & {}) | null;
+  /** What went wrong */
+  message?: string | null;
+  [key: string]: unknown;
+}
+
+/** How far the stages of one company got. */
+export interface CompanyEnrichment {
+  /** `partial` while any stage is `pending`, then `complete` */
+  status?: 'partial' | 'complete' | null;
+  /** State of each stage */
+  stages?: CompanyEnrichmentStages | null;
+  /** Stages that failed, and why */
+  errors: CompanyEnrichmentError[];
+  [key: string]: unknown;
+}
+
+/** Fit score of a Company Search result. Null for Company Enrich. */
+export interface CompanyScore {
+  /** Fit score (0-100) */
+  value?: number | null;
+  /** Whether the company qualified */
+  qualified?: boolean | null;
+  /** How relevant the company is */
+  relevance?: 'high' | 'medium' | 'low' | null;
+  /** One line on why this company matched */
+  summary?: string | null;
+  /** Signals from the request that matched */
+  matched_signals: string[];
+  /** Why the company fits */
+  reasons: string[];
+  /** Reasons the match may be weaker */
+  concerns: string[];
+  /** One check per criterion: what the company's own pages confirm. Information only. */
+  criteria_checks: PeopleCriterionCheck[];
+  /** True when every criterion is `met` and no disqualifier (`is_disqualifier`) is */
+  fully_verified?: boolean | null;
+  [key: string]: unknown;
+}
+
+/** A search that found the company. */
+export interface CompanyFoundBy {
+  /** The search that found the company (Company Enrich: the domain) */
+  query?: string | null;
+  /** The URL it found */
+  url?: string | null;
+  /** Title of the hit */
+  title?: string | null;
+  /** How it was found: `direct` (a hit on the company's own site), `list` (a page listing companies) or `domain` (Company Enrich) */
+  kind?: 'direct' | 'list' | 'domain' | (string & {}) | null;
+  [key: string]: unknown;
+}
+
+/**
+ * One company. Published once the stages its request needs have run; the later stages fill it in
+ * (`enrichment.status` is `partial` until then), so read it again for its latest version.
+ */
+export interface Company {
+  /** Stable company ID, e.g. company:acme.com */
+  id: string;
+  /** Always `company`, also for Company Enrich */
+  platform: 'company';
+  /** The company's domain */
+  handle: string;
+  /** The company's domain, e.g. acme.com */
+  domain: string;
+  /** Homepage URL */
+  url?: string | null;
+  /** Company name */
+  name?: string | null;
+  /** What the company does */
+  description?: string | null;
+  /** Logo URL */
+  logo_url?: string | null;
+  /** Country, city and address */
+  location?: CompanyLocation | null;
+  /** Industry, e.g. Fintech */
+  industry?: string | null;
+  /**
+   * The company's emails. System addresses (noreply@, postmaster@ ...) and junk (placeholders, vendor addresses)
+   * are left out.
+   */
+  emails: CompanyEmail[];
+  /** The company's phone numbers (at most 4). Fax numbers are left out. */
+  phones: CompanyPhone[];
+  /** The company's social profiles */
+  socials: CompanySocial[];
+  /** The pages that were read */
+  pages: CompanyPage[];
+  /** Leaders with one of the request's `roles` */
+  people: CompanyPerson[];
+  /**
+   * The company's best email: never a `support`, `legal`, `careers`, `press` or `other` address; an inferred one
+   * only when `valid`.
+   */
+  primary_email?: CompanyEmail | null;
+  /** The person to contact first, and why */
+  primary_contact?: CompanyPrimaryContact | null;
+  /** What was found: the same names as `filters.require` */
+  contact_coverage?: CompanyContactCoverage | null;
+  /** How far the stages got */
+  enrichment?: CompanyEnrichment | null;
+  /** The fit score. Null for Company Enrich. */
+  score?: CompanyScore | null;
+  /** The searches that found the company */
+  found_by: CompanyFoundBy[];
+  [key: string]: unknown;
+}
+
+export interface CompanyResultsPage {
+  /** Task ID */
+  task_id: string;
+  /** Task status when the page was read */
+  status: PeopleTaskStatus;
+  /** Companies on this page, in the order they were found */
+  results: Company[];
+  /**
+   * Pass as `cursor` on the next call to get only companies delivered after this page. Companies already
+   * delivered are filled in place by later stages: read again without `cursor` to get their latest version.
+   */
+  next_cursor: string;
+  /** True when more results are already available after this page */
+  has_more: boolean;
 }
 
 // ============================================================================

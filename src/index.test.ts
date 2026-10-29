@@ -166,6 +166,19 @@ describe('Desearch response metadata', () => {
     );
   });
 
+  it('requests markdown', async () => {
+    mockResponse({ body: '# Desearch', contentType: 'text/markdown' });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.extract({ url: 'https://desearch.ai', format: 'markdown' })
+    ).resolves.toBe('# Desearch');
+
+    expect(mockedFetch.mock.calls[0]?.[0]).toBe(
+      'https://api.desearch.ai/web/extract?url=https%3A%2F%2Fdesearch.ai&format=markdown'
+    );
+  });
+
   it('sends full_page for all visible text', async () => {
     mockResponse({ body: 'every section', contentType: 'text/plain' });
 

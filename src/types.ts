@@ -207,7 +207,7 @@ export interface DesearchCostMetadata {
   /** Billing currency for the request, parsed from X-Desearch-Currency when present. */
   currency?: string;
   /**
-   * Cursor for the next page of a TikTok, Facebook or Instagram list route, from the
+   * Cursor for the next page of a TikTok, Facebook, Instagram, YouTube or Reddit list route, from the
    * x-desearch-next-cursor header. Absent on the last page. It is opaque: send it back unchanged
    * as `cursor` on the same method with the same target. It is valid for 24 hours.
    */
@@ -1623,6 +1623,431 @@ export interface InstagramSearchResult {
   followers?: number | null;
   /** Not returned: search does not provide an exact account post total */
   mediaCount?: number | null;
+}
+
+// ============================================================================
+// YouTube, Reddit and Threads Pagination Types
+// ============================================================================
+
+/**
+ * Paging field of the YouTube and Reddit list routes. They take no `count`: one call returns one
+ * provider page.
+ */
+export interface SocialCursorParams {
+  /**
+   * Opaque cursor for the next page: the `nextCursor` metadata (x-desearch-next-cursor header) of the
+   * previous page, sent back unchanged with the same target. Omit it for the first page. A cursor is
+   * valid for 24 hours; an expired, changed or other-target cursor is a 422 and is not charged.
+   */
+  cursor?: string | null;
+}
+
+// ============================================================================
+// YouTube Types
+// ============================================================================
+
+/** Kind of result `youtubeSearch` returns. Omit it for mixed results. */
+export type YouTubeSearchType = 'videos' | 'shorts' | 'channels' | 'playlists';
+
+/** Upload window of a YouTube search. */
+export type YouTubeUploadDate = 'today' | 'this_week' | 'this_month' | 'this_year';
+
+/** Order of YouTube search results. */
+export type YouTubeSearchSort = 'relevance' | 'popular';
+
+/** Video length filter of a YouTube search. Applies to videos, not Shorts. */
+export type YouTubeDuration =
+  | 'under_3_min'
+  | 'between_3_and_20_min'
+  | 'over_20_min';
+
+export interface YouTubeSearchRequest {
+  /** Keyword or phrase (1-500 characters). Use `intitle:"…"` for stricter title matching. */
+  query: string;
+  /** Only return this kind of result. Omit for mixed results. */
+  type?: YouTubeSearchType | null;
+  /** Only return videos uploaded in this window */
+  upload_date?: YouTubeUploadDate | null;
+  /** Result order */
+  sort_by?: YouTubeSearchSort | null;
+  /** Video length filter */
+  duration?: YouTubeDuration | null;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and filters */
+  cursor?: string | null;
+}
+
+export interface YouTubeVideoParams {
+  /** YouTube video or Short ID, or its full URL */
+  id: string;
+}
+
+export interface YouTubeTranscriptParams {
+  /** YouTube video or Short ID, or its full URL */
+  video_id: string;
+  /** Caption language code, for example `en` or `es`. Omit for YouTube's default track. */
+  language?: string | null;
+}
+
+/** Order of YouTube comments. */
+export type YouTubeCommentOrder = 'top' | 'newest';
+
+export interface YouTubeCommentsParams extends SocialCursorParams {
+  /** YouTube video or Short ID, or its full URL */
+  video_id: string;
+  /** Comment order */
+  order?: YouTubeCommentOrder | null;
+}
+
+export interface YouTubeChannelParams {
+  /** Channel handle (with or without @) or channel ID (`UC…`) */
+  handle: string;
+}
+
+/** Order of a YouTube channel's videos. */
+export type YouTubeChannelVideosSort = 'latest' | 'popular';
+
+export interface YouTubeChannelVideosParams extends SocialCursorParams {
+  /** Channel handle (with or without @) or channel ID (`UC…`) */
+  handle: string;
+  /** Video order (default latest) */
+  sort?: YouTubeChannelVideosSort | null;
+}
+
+/** Kind of a YouTube search or channel-tab entry. */
+export type YouTubeItemType = 'video' | 'short' | 'live' | 'channel' | 'playlist';
+
+/** The channel a YouTube video belongs to. */
+export interface YouTubeChannelRef {
+  id?: string | null;
+  title?: string | null;
+  handle?: string | null;
+  url?: string | null;
+  thumbnail?: string | null;
+  subscriberCountText?: string | null;
+}
+
+/** A YouTube search or channel-tab entry. Fields depend on `type`. */
+export interface YouTubeItem {
+  id?: string | null;
+  type?: YouTubeItemType | null;
+  /** Left out for channel and playlist search results */
+  url?: string | null;
+  title?: string | null;
+  description?: string | null;
+  thumbnail?: string | null;
+  /** Channel results only */
+  handle?: string | null;
+  channel?: YouTubeChannelRef | null;
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  /** Best-effort ISO timestamp derived from `publishedText` (lists only show a relative label) */
+  publishedAt?: string | null;
+  publishedText?: string | null;
+  durationSeconds?: number | null;
+  durationText?: string | null;
+  badges?: string[] | null;
+  /** Channel results only */
+  subscriberCountText?: string | null;
+  /** Channel results only */
+  videoCountText?: string | null;
+  /** Playlist results only */
+  videoCount?: number | null;
+}
+
+export interface YouTubeChapter {
+  title?: string | null;
+  startSeconds?: number | null;
+  startText?: string | null;
+}
+
+export interface YouTubeCaptionLanguage {
+  languageCode?: string | null;
+  name?: string | null;
+  autoGenerated?: boolean | null;
+}
+
+/** A normalized public YouTube video or Short. */
+export interface YouTubeVideo {
+  id?: string | null;
+  type?: string | null;
+  url?: string | null;
+  title?: string | null;
+  description?: string | null;
+  thumbnail?: string | null;
+  channel?: YouTubeChannelRef | null;
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  publishedAt?: string | null;
+  durationSeconds?: number | null;
+  genre?: string | null;
+  keywords?: string[];
+  chapters?: YouTubeChapter[];
+  /** Caption tracks YouTube offers. Fetch one with `youtubeTranscript`. */
+  captionLanguages?: YouTubeCaptionLanguage[] | null;
+  isPaidPromotion?: boolean | null;
+  isMadeWithAI?: boolean | null;
+}
+
+export interface YouTubeTranscriptSegment {
+  text?: string | null;
+  startMs?: number | null;
+  endMs?: number | null;
+  startText?: string | null;
+}
+
+/** The public captions of a YouTube video or Short. */
+export interface YouTubeTranscript {
+  videoId?: string | null;
+  type?: string | null;
+  url?: string | null;
+  language?: string | null;
+  /** The whole transcript as plain text */
+  text?: string | null;
+  segments?: YouTubeTranscriptSegment[];
+}
+
+export interface YouTubeCommentAuthor {
+  name?: string | null;
+  channelId?: string | null;
+  url?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+  isCreator?: boolean | null;
+}
+
+/** A public top-level YouTube comment. */
+export interface YouTubeComment {
+  id?: string | null;
+  videoId?: string | null;
+  text?: string | null;
+  /** Best-effort ISO timestamp derived from `publishedText` */
+  publishedAt?: string | null;
+  publishedText?: string | null;
+  author?: YouTubeCommentAuthor | null;
+  likes?: number | null;
+  replyCount?: number | null;
+}
+
+/** Public YouTube channel metadata. */
+export interface YouTubeChannel {
+  id?: string | null;
+  url?: string | null;
+  handle?: string | null;
+  name?: string | null;
+  description?: string | null;
+  avatar?: string | null;
+  subscribers?: number | null;
+  subscriberCountText?: string | null;
+  videoCountText?: string | null;
+  viewCountText?: string | null;
+  joinedText?: string | null;
+  country?: string | null;
+  tags?: string[] | null;
+  links?: string[] | null;
+  /** Only when the channel lists a public email */
+  email?: string | null;
+  twitter?: string | null;
+  instagram?: string | null;
+}
+
+// ============================================================================
+// Reddit Types
+// ============================================================================
+
+/** Order of Reddit search results. */
+export type RedditSearchSort = 'relevance' | 'new' | 'top' | 'comment_count';
+
+/** Time window of a Reddit search or of a subreddit's `top` posts. */
+export type RedditTimeframe = 'all' | 'day' | 'week' | 'month' | 'year';
+
+export interface RedditSearchRequest {
+  /** Keyword or phrase to search across Reddit posts (1-500 characters) */
+  query: string;
+  /** Result order */
+  sort?: RedditSearchSort | null;
+  /** Only return posts from this window */
+  timeframe?: RedditTimeframe | null;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and filters */
+  cursor?: string | null;
+}
+
+export interface RedditSubredditParams {
+  /** Subreddit name without r/. Case-sensitive: `AskReddit`, not `askreddit`. */
+  name: string;
+}
+
+/** Order of a subreddit's posts. */
+export type RedditSubredditSort = 'best' | 'hot' | 'new' | 'top' | 'rising';
+
+export interface RedditSubredditPostsParams extends SocialCursorParams {
+  /** Subreddit name without r/. Case-sensitive. */
+  name: string;
+  /** Post order */
+  sort?: RedditSubredditSort | null;
+  /** Time window for `top`. Ignored with another sort; without a sort it means `top`. */
+  timeframe?: RedditTimeframe | null;
+}
+
+export interface RedditPostByIdParams {
+  /** Reddit post ID (for example `1q6pxwn`, with or without `t3_`) or its full URL */
+  id: string;
+}
+
+export interface RedditCommentsParams extends SocialCursorParams {
+  /** Reddit post ID (for example `1q6pxwn`, with or without `t3_`) or its full URL */
+  post_id: string;
+}
+
+/** A normalized public Reddit post. */
+export interface RedditPost {
+  id?: string | null;
+  /** Reddit fullname (`t3_` + id) */
+  name?: string | null;
+  title?: string | null;
+  /** Body of a text post */
+  text?: string | null;
+  author?: string | null;
+  subreddit?: string | null;
+  /** Reddit permalink of the post */
+  url?: string | null;
+  /** Outbound link of a link post, when different from `url` */
+  linkUrl?: string | null;
+  score?: number | null;
+  upvotes?: number | null;
+  upvoteRatio?: number | null;
+  commentCount?: number | null;
+  createdAt?: string | null;
+  flair?: string | null;
+  isVideo?: boolean | null;
+  over18?: boolean | null;
+  locked?: boolean | null;
+  archived?: boolean | null;
+  subredditSubscribers?: number | null;
+}
+
+/** Public subreddit metadata. */
+export interface RedditSubreddit {
+  id?: string | null;
+  name?: string | null;
+  url?: string | null;
+  description?: string | null;
+  rules?: string | null;
+  weeklyActiveUsers?: number | null;
+  weeklyContributions?: number | null;
+  icon?: string | null;
+  header?: string | null;
+  createdAt?: string | null;
+  advertiserCategory?: string | null;
+  submitText?: string | null;
+}
+
+/** A public Reddit comment with the replies Reddit loaded alongside it. */
+export interface RedditComment {
+  id?: string | null;
+  /** Reddit fullname (`t1_` + id) */
+  name?: string | null;
+  postId?: string | null;
+  /** Fullname of the parent post (`t3_`) or comment (`t1_`) */
+  parentId?: string | null;
+  author?: string | null;
+  text?: string | null;
+  score?: number | null;
+  createdAt?: string | null;
+  url?: string | null;
+  /** 0 for a top-level comment */
+  depth?: number | null;
+  /** Replies loaded with this page */
+  replies?: RedditComment[];
+  /** True when Reddit has more replies than were loaded */
+  hasMoreReplies?: boolean | null;
+}
+
+// ============================================================================
+// Threads Types
+// ============================================================================
+
+/** Threads search returns one page of posts and does not paginate, so it takes no `cursor`. */
+export interface ThreadsSearchRequest {
+  /** Keyword or phrase to search on Threads (1-500 characters) */
+  query: string;
+  /** Only posts on or after this date (YYYY-MM-DD) */
+  start_date?: string | null;
+  /** Only posts on or before this date (YYYY-MM-DD) */
+  end_date?: string | null;
+}
+
+export interface ThreadsSearchUsersRequest {
+  /** Username or name to search for (1-100 characters) */
+  query: string;
+}
+
+export interface ThreadsProfileParams {
+  /** Threads username without @ */
+  username: string;
+}
+
+/** Threads shows only an account's latest 20-30 posts publicly, so this route takes no `cursor`. */
+export interface ThreadsProfilePostsParams {
+  /** Threads username without @ */
+  username: string;
+}
+
+export interface ThreadsPostByIdParams {
+  /** Threads post URL or shortcode */
+  id: string;
+}
+
+/** A Threads account as it appears on a post or in user search. */
+export interface ThreadsUser {
+  id?: string | null;
+  username?: string | null;
+  fullName?: string | null;
+  avatar?: string | null;
+  verified?: boolean | null;
+}
+
+/** A normalized public Threads post. */
+export interface ThreadsPost {
+  id?: string | null;
+  /** Post shortcode from the URL */
+  code?: string | null;
+  url?: string | null;
+  text?: string | null;
+  createdAt?: string | null;
+  author?: ThreadsUser | null;
+  likes?: number | null;
+  replies?: number | null;
+  reposts?: number | null;
+  quotes?: number | null;
+  reshares?: number | null;
+  views?: number | null;
+  images?: string[] | null;
+  videos?: string[] | null;
+}
+
+/** A Threads post with the replies and thread continuation posts returned alongside it. */
+export interface ThreadsPostDetail extends ThreadsPost {
+  /** Public replies returned with the post */
+  comments?: ThreadsPost[];
+  /** The author's own continuation posts in the same thread */
+  threadItems?: ThreadsPost[];
+}
+
+/** A public Threads profile. */
+export interface ThreadsProfile {
+  id?: string | null;
+  username?: string | null;
+  url?: string | null;
+  fullName?: string | null;
+  bio?: string | null;
+  avatar?: string | null;
+  followers?: number | null;
+  verified?: boolean | null;
+  isPrivate?: boolean | null;
+  isThreadsOnly?: boolean | null;
+  links?: string[] | null;
 }
 
 // ============================================================================

@@ -31,7 +31,7 @@ Status legend:
 | Company Search idempotent creates | ✅ | `src/index.ts` `companySearch`, `companyEnrich` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
 | Streaming AI responses | ❌ | `aiSearch` forces `streaming: false` | The SDK does not surface streamed results. |
 | Streaming network stats (Server-Sent Events) | ✅ | `src/index.ts` `streamNetworkStats`, `SseParser` | Async iterator over `stats` events; `lastEventId` replays missed snapshots, `signal` stops it. No automatic reconnect. |
-| Social cursor pagination | ✅ | `src/index.ts` `parseResponseMetadata` | `x-desearch-next-cursor` is returned as `metadata.nextCursor` with `{ includeMetadata: true }`; social list methods take `cursor`. |
+| Social cursor pagination | ✅ | `src/index.ts` `parseResponseMetadata` | `x-desearch-next-cursor` is returned as `metadata.nextCursor` with `{ includeMetadata: true }`; social, YouTube and Reddit list methods take `cursor`. |
 | URL-encoded path parameters | ✅ | `src/index.ts` `socialPath`, `peopleTaskPath` | IDs and post URLs that contain `/` reach the `{id:path}` routes as one value. |
 | Browser-first transport abstraction | ❌ | `import { fetch } from 'undici'` | Current transport choice is explicitly Node-oriented. |
 
@@ -77,6 +77,22 @@ Status legend:
 | `networkStats` | `GET /network/stats` | ✅ | Public; no `Authorization` header is sent. |
 | `networkStatsHistory` | `GET /network/stats/history` | ✅ | Public; last 20 minutes, one point per second. |
 | `streamNetworkStats` | `GET /network/stats/stream` | ✅ | Public; async iterator over Server-Sent Events. |
+| `youtubeSearch` | `POST /desearch/youtube/search` | ✅ | Videos, Shorts, live, channels and playlists; paginated, `cursor` in the body. |
+| `youtubeVideo` | `GET /desearch/youtube/video/{id}` | ✅ | ID or URL. |
+| `youtubeTranscript` | `GET /desearch/youtube/transcript/{video_id}` | ✅ | Optional `language`; no captions is a free 404. |
+| `youtubeComments` | `GET /desearch/youtube/comments/{video_id}` | ✅ | Paginated; `order` top or newest. |
+| `youtubeChannel` | `GET /desearch/youtube/channel/{handle}` | ✅ | Handle (with or without @) or channel ID. |
+| `youtubeChannelVideos` | `GET /desearch/youtube/channel/{handle}/videos` | ✅ | Paginated; `sort` latest or popular. |
+| `redditSearch` | `POST /desearch/reddit/search` | ✅ | Paginated, `cursor` in the body. |
+| `redditSubreddit` | `GET /desearch/reddit/subreddit/{name}` | ✅ | Case-sensitive name. |
+| `redditSubredditPosts` | `GET /desearch/reddit/subreddit/{name}/posts` | ✅ | Paginated; `sort`, `timeframe`. |
+| `redditPostById` | `GET /desearch/reddit/post/{id}` | ✅ | ID or URL; no comments. |
+| `redditComments` | `GET /desearch/reddit/comments/{post_id}` | ✅ | Comment tree; paginated. |
+| `threadsSearch` | `POST /desearch/threads/search` | ✅ | One page; no cursor. |
+| `threadsSearchUsers` | `POST /desearch/threads/search/users` | ✅ | Accounts by username or name. |
+| `threadsProfile` | `GET /desearch/threads/profile/{username}` | ✅ | Single profile. |
+| `threadsProfilePosts` | `GET /desearch/threads/profile/{username}/posts` | ✅ | Latest 20-30 posts; no cursor. |
+| `threadsPostById` | `GET /desearch/threads/post/{id}` | ✅ | URL or shortcode; with replies and thread items. |
 | `xProfileSearch` | `POST /desearch/people/search/x` | ✅ | Billed. Starts an X Profile Search task (HTTP 202). |
 | `youtubeCreatorSearch` | `POST /desearch/people/search/youtube` | ✅ | Billed. Starts a YouTube Creator Search task. |
 | `linkedinProfileSearch` | `POST /desearch/people/search/linkedin` | ✅ | Billed. Starts a LinkedIn Profile Search task. |
@@ -133,6 +149,10 @@ Status legend:
 - ✅ `TikTokSearchRequest`, `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
 - ✅ `FacebookSearchRequest`, `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
 - ✅ `InstagramSearchRequest` (no `cursor`), `InstagramMediaParams`, `InstagramProfileParams`, `InstagramProfilePostsParams`, `InstagramCommentsParams`, `InstagramHashtagParams`
+- ✅ `SocialCursorParams` (`cursor` only, for the YouTube and Reddit list routes)
+- ✅ `YouTubeSearchRequest`, `YouTubeVideoParams`, `YouTubeTranscriptParams`, `YouTubeCommentsParams`, `YouTubeChannelParams`, `YouTubeChannelVideosParams` and the unions `YouTubeSearchType`, `YouTubeUploadDate`, `YouTubeSearchSort`, `YouTubeDuration`, `YouTubeCommentOrder`, `YouTubeChannelVideosSort`
+- ✅ `RedditSearchRequest`, `RedditSubredditParams`, `RedditSubredditPostsParams`, `RedditPostByIdParams`, `RedditCommentsParams` and the unions `RedditSearchSort`, `RedditSubredditSort`, `RedditTimeframe`
+- ✅ `ThreadsSearchRequest` (no `cursor`), `ThreadsSearchUsersRequest`, `ThreadsProfileParams`, `ThreadsProfilePostsParams` (no `cursor`), `ThreadsPostByIdParams`
 - ✅ `SearchApiRequest`, `SearchApiMode`
 - ✅ `StreamNetworkStatsOptions` (`lastEventId`, `signal`)
 
@@ -171,6 +191,9 @@ Status legend:
 - ✅ `TikTokPost`, `TikTokProfile`, `TikTokComment`, `TikTokAuthor`, `TikTokStats`, `TikTokMusic`
 - ✅ `FacebookPost`, `FacebookProfile`, `FacebookComment`, `FacebookMedia`, `FacebookPostStats`
 - ✅ `InstagramMedia`, `InstagramProfile`, `InstagramComment`, `InstagramStats`, `InstagramSearchResult`, `InstagramSearchResultType`
+- ✅ `YouTubeItem`, `YouTubeItemType`, `YouTubeChannelRef`, `YouTubeVideo`, `YouTubeChapter`, `YouTubeCaptionLanguage`, `YouTubeTranscript`, `YouTubeTranscriptSegment`, `YouTubeComment`, `YouTubeCommentAuthor`, `YouTubeChannel`
+- ✅ `RedditPost`, `RedditSubreddit`, `RedditComment` (recursive `replies`)
+- ✅ `ThreadsPost`, `ThreadsPostDetail`, `ThreadsProfile`, `ThreadsUser`
 - ✅ `SearchApiResponse`, `SearchApiResult`
 - ✅ `NetworkStatsResponse`, `NetworkStatsRates`, `NetworkStatsHistoryResponse`, `NetworkStatsHistoryPoint`, `NetworkStatsStreamEvent`
 - ✅ `DesearchCostMetadata.nextCursor` (from `x-desearch-next-cursor`)
@@ -200,6 +223,7 @@ Status legend:
 
 - typed wrappers for the current public read, search, and extraction endpoints
 - TikTok, Facebook and Instagram routes with cursor pagination through `metadata.nextCursor`
+- YouTube, Reddit and Threads routes, with the same cursor pagination on the YouTube and Reddit lists
 - the Search API and the public network stats, including a live Server-Sent Events stream
 - People Search across X, YouTube, LinkedIn and TikTok, with task control, polling and pagination helpers
 - Company Search and Company Enrich, with task control, a polling helper and a company iterator

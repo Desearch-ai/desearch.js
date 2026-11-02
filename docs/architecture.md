@@ -24,10 +24,11 @@ This file contains:
 - all public SDK methods
 - `PeopleTaskConflictError` and `CompanyTaskConflictError`, the error classes thrown when a People Search or company task action is refused
 
-Those public methods fall into seven groups:
+Those public methods fall into eight groups:
 - AI search methods
 - X or Twitter methods
 - TikTok, Facebook and Instagram methods
+- YouTube, Reddit and Threads methods
 - web methods, including the Search API
 - People Search methods and helpers
 - Company Search and Company Enrich methods and helpers
@@ -176,7 +177,7 @@ Metadata comes from these response headers on the same API response:
 - `X-Desearch-Usage-Count`
 - `X-Desearch-Service`
 - `X-Desearch-Currency`
-- `x-desearch-next-cursor` (`nextCursor`: the next-page cursor of the social list routes, absent on the last page)
+- `x-desearch-next-cursor` (`nextCursor`: the next-page cursor of the social, YouTube and Reddit list routes, absent on the last page)
 
 Numeric headers are parsed defensively. Missing, empty, or malformed values are omitted from `metadata` instead of throwing or failing an otherwise successful SDK call.
 
@@ -245,6 +246,12 @@ The main difference is the response shape:
 - `tiktokSearch`, `facebookSearch` and `instagramSearch` POST a JSON body.
 - The other social methods are GET calls. The target (`id`, `username`, `video_id`, `profile_id`, `post_id`, `shortcode` or `tag`) is URL-encoded into the path by `socialPath`, and only `count`, `cursor` (and `region` for trending) go in the query string. The API decodes the path before routing, so an ID or post URL that contains `/` reaches its `{id:path}` route as one value.
 - List routes return a JSON array and put the next-page cursor in the `x-desearch-next-cursor` header. The SDK surfaces it as `metadata.nextCursor` when the caller passes `{ includeMetadata: true }`, and the caller sends it back as `cursor` (in the body for the two paginated searches, in the query elsewhere). The SDK never builds or changes a cursor, and has no auto-paging helper for these routes.
+
+### YouTube, Reddit and Threads methods
+
+- `youtubeSearch`, `redditSearch`, `threadsSearch` and `threadsSearchUsers` POST a JSON body.
+- The other methods are GET calls. The target (`id`, `video_id`, `handle`, `name`, `post_id` or `username`) goes into the path through `socialPath`, so video, post and comment URLs reach the API as one value. Only the filters (`language`, `order`, `sort`, `timeframe`) and `cursor` go in the query string.
+- The paginated YouTube and Reddit routes work like the TikTok ones: a JSON array, the next cursor in `x-desearch-next-cursor`, surfaced as `metadata.nextCursor`. They take no `count`. The Threads routes never send a cursor.
 
 ### Network stats methods
 

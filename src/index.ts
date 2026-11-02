@@ -95,6 +95,34 @@ import type {
   InstagramMedia,
   InstagramProfile,
   InstagramComment,
+  YouTubeSearchRequest,
+  YouTubeVideoParams,
+  YouTubeTranscriptParams,
+  YouTubeCommentsParams,
+  YouTubeChannelParams,
+  YouTubeChannelVideosParams,
+  YouTubeItem,
+  YouTubeVideo,
+  YouTubeTranscript,
+  YouTubeComment,
+  YouTubeChannel,
+  RedditSearchRequest,
+  RedditSubredditParams,
+  RedditSubredditPostsParams,
+  RedditPostByIdParams,
+  RedditCommentsParams,
+  RedditPost,
+  RedditSubreddit,
+  RedditComment,
+  ThreadsSearchRequest,
+  ThreadsSearchUsersRequest,
+  ThreadsProfileParams,
+  ThreadsProfilePostsParams,
+  ThreadsPostByIdParams,
+  ThreadsPost,
+  ThreadsPostDetail,
+  ThreadsProfile,
+  ThreadsUser,
   NetworkStatsResponse,
   NetworkStatsHistoryResponse,
   NetworkStatsStreamEvent,
@@ -1747,6 +1775,528 @@ export class Desearch {
       'GET',
       this.socialPath('/desearch/instagram/hashtag', params.tag),
       { count: params.count, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Search public YouTube videos, Shorts, live streams, channels and playlists by keyword.
+   *
+   * Each result has a `type`. A video `id` works with `youtubeVideo`, `youtubeTranscript` and `youtubeComments`.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param payload - The search request including query, and optional type, upload_date, sort_by, duration and the cursor of the previous page.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of YouTube results, or a metadata wrapper when opted in.
+   */
+  async youtubeSearch(
+    payload: YouTubeSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeItem[]>>;
+  async youtubeSearch(
+    payload: YouTubeSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeItem[]>;
+  async youtubeSearch(
+    payload: YouTubeSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeItem[] | DesearchResponse<YouTubeItem[]>>;
+  async youtubeSearch(
+    payload: YouTubeSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeItem[] | DesearchResponse<YouTubeItem[]>> {
+    return this.handleRequest<YouTubeItem[]>(
+      'POST',
+      '/desearch/youtube/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public YouTube video or Short: title, description, channel, views, likes, comments, chapters and caption languages.
+   *
+   * @param params - Object containing the video or Short ID, or its full URL (URL-encoded into the path).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The YouTube video, or a metadata wrapper when opted in.
+   */
+  async youtubeVideo(
+    params: YouTubeVideoParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeVideo>>;
+  async youtubeVideo(
+    params: YouTubeVideoParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeVideo>;
+  async youtubeVideo(
+    params: YouTubeVideoParams,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeVideo | DesearchResponse<YouTubeVideo>>;
+  async youtubeVideo(
+    params: YouTubeVideoParams,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeVideo | DesearchResponse<YouTubeVideo>> {
+    return this.handleRequest<YouTubeVideo>(
+      'GET',
+      this.socialPath('/desearch/youtube/video', params.id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public captions of a YouTube video or Short as plain text and timestamped segments.
+   *
+   * A video without captions is a 404 and is not charged.
+   *
+   * @param params - Object containing the video or Short ID, or its full URL, and an optional caption language code (YouTube's default track when omitted).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The transcript, or a metadata wrapper when opted in.
+   */
+  async youtubeTranscript(
+    params: YouTubeTranscriptParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeTranscript>>;
+  async youtubeTranscript(
+    params: YouTubeTranscriptParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeTranscript>;
+  async youtubeTranscript(
+    params: YouTubeTranscriptParams,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeTranscript | DesearchResponse<YouTubeTranscript>>;
+  async youtubeTranscript(
+    params: YouTubeTranscriptParams,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeTranscript | DesearchResponse<YouTubeTranscript>> {
+    return this.handleRequest<YouTubeTranscript>(
+      'GET',
+      this.socialPath('/desearch/youtube/transcript', params.video_id),
+      { language: params.language },
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public top-level comments of a YouTube video.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the video ID or URL, and optional order (`top` or `newest`) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of YouTube comments, or a metadata wrapper when opted in.
+   */
+  async youtubeComments(
+    params: YouTubeCommentsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeComment[]>>;
+  async youtubeComments(
+    params: YouTubeCommentsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeComment[]>;
+  async youtubeComments(
+    params: YouTubeCommentsParams,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeComment[] | DesearchResponse<YouTubeComment[]>>;
+  async youtubeComments(
+    params: YouTubeCommentsParams,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeComment[] | DesearchResponse<YouTubeComment[]>> {
+    return this.handleRequest<YouTubeComment[]>(
+      'GET',
+      this.socialPath('/desearch/youtube/comments', params.video_id),
+      { order: params.order, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Retrieve public YouTube channel metadata: subscribers, description, country and links.
+   *
+   * @param params - Object containing the channel handle (with or without @) or channel ID (`UC…`).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The YouTube channel, or a metadata wrapper when opted in.
+   */
+  async youtubeChannel(
+    params: YouTubeChannelParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeChannel>>;
+  async youtubeChannel(
+    params: YouTubeChannelParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeChannel>;
+  async youtubeChannel(
+    params: YouTubeChannelParams,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeChannel | DesearchResponse<YouTubeChannel>>;
+  async youtubeChannel(
+    params: YouTubeChannelParams,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeChannel | DesearchResponse<YouTubeChannel>> {
+    return this.handleRequest<YouTubeChannel>(
+      'GET',
+      this.socialPath('/desearch/youtube/channel', params.handle),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public videos a YouTube channel uploaded, latest or most popular first.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the channel handle or ID, and optional sort (`latest` or `popular`) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of YouTube videos, or a metadata wrapper when opted in.
+   */
+  async youtubeChannelVideos(
+    params: YouTubeChannelVideosParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<YouTubeItem[]>>;
+  async youtubeChannelVideos(
+    params: YouTubeChannelVideosParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<YouTubeItem[]>;
+  async youtubeChannelVideos(
+    params: YouTubeChannelVideosParams,
+    options: DesearchRequestOptions
+  ): Promise<YouTubeItem[] | DesearchResponse<YouTubeItem[]>>;
+  async youtubeChannelVideos(
+    params: YouTubeChannelVideosParams,
+    options?: DesearchRequestOptions
+  ): Promise<YouTubeItem[] | DesearchResponse<YouTubeItem[]>> {
+    return this.handleRequest<YouTubeItem[]>(
+      'GET',
+      this.socialPath('/desearch/youtube/channel', params.handle, '/videos'),
+      { sort: params.sort, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Search public Reddit posts across all subreddits by keyword.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param payload - The search request including query, and optional sort, timeframe and the cursor of the previous page.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Reddit posts, or a metadata wrapper when opted in.
+   */
+  async redditSearch(
+    payload: RedditSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<RedditPost[]>>;
+  async redditSearch(
+    payload: RedditSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<RedditPost[]>;
+  async redditSearch(
+    payload: RedditSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<RedditPost[] | DesearchResponse<RedditPost[]>>;
+  async redditSearch(
+    payload: RedditSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<RedditPost[] | DesearchResponse<RedditPost[]>> {
+    return this.handleRequest<RedditPost[]>(
+      'POST',
+      '/desearch/reddit/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve public subreddit metadata: description, rules, weekly active users and contributions.
+   *
+   * The name is case-sensitive (`AskReddit`, not `askreddit`).
+   *
+   * @param params - Object containing the subreddit name without r/.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The subreddit, or a metadata wrapper when opted in.
+   */
+  async redditSubreddit(
+    params: RedditSubredditParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<RedditSubreddit>>;
+  async redditSubreddit(
+    params: RedditSubredditParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<RedditSubreddit>;
+  async redditSubreddit(
+    params: RedditSubredditParams,
+    options: DesearchRequestOptions
+  ): Promise<RedditSubreddit | DesearchResponse<RedditSubreddit>>;
+  async redditSubreddit(
+    params: RedditSubredditParams,
+    options?: DesearchRequestOptions
+  ): Promise<RedditSubreddit | DesearchResponse<RedditSubreddit>> {
+    return this.handleRequest<RedditSubreddit>(
+      'GET',
+      this.socialPath('/desearch/reddit/subreddit', params.name),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public posts of a subreddit with Reddit's sort and time filters.
+   *
+   * `timeframe` applies to `top`; without a `sort` it means `top`.
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the subreddit name, and optional sort, timeframe and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Reddit posts, or a metadata wrapper when opted in.
+   */
+  async redditSubredditPosts(
+    params: RedditSubredditPostsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<RedditPost[]>>;
+  async redditSubredditPosts(
+    params: RedditSubredditPostsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<RedditPost[]>;
+  async redditSubredditPosts(
+    params: RedditSubredditPostsParams,
+    options: DesearchRequestOptions
+  ): Promise<RedditPost[] | DesearchResponse<RedditPost[]>>;
+  async redditSubredditPosts(
+    params: RedditSubredditPostsParams,
+    options?: DesearchRequestOptions
+  ): Promise<RedditPost[] | DesearchResponse<RedditPost[]>> {
+    return this.handleRequest<RedditPost[]>(
+      'GET',
+      this.socialPath('/desearch/reddit/subreddit', params.name, '/posts'),
+      {
+        sort: params.sort,
+        timeframe: params.timeframe,
+        cursor: params.cursor,
+      },
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Reddit post by ID or URL, without its comments.
+   *
+   * @param params - Object containing the post ID (with or without `t3_`) or its full URL (URL-encoded into the path).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Reddit post, or a metadata wrapper when opted in.
+   */
+  async redditPostById(
+    params: RedditPostByIdParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<RedditPost>>;
+  async redditPostById(
+    params: RedditPostByIdParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<RedditPost>;
+  async redditPostById(
+    params: RedditPostByIdParams,
+    options: DesearchRequestOptions
+  ): Promise<RedditPost | DesearchResponse<RedditPost>>;
+  async redditPostById(
+    params: RedditPostByIdParams,
+    options?: DesearchRequestOptions
+  ): Promise<RedditPost | DesearchResponse<RedditPost>> {
+    return this.handleRequest<RedditPost>(
+      'GET',
+      this.socialPath('/desearch/reddit/post', params.id),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve the public comments of a Reddit post as a tree: top-level comments with the replies Reddit loaded alongside them.
+   *
+   * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
+   *
+   * @param params - Object containing the post ID or URL, and an optional cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
+   * @returns An array of Reddit comments, or a metadata wrapper when opted in.
+   */
+  async redditComments(
+    params: RedditCommentsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<RedditComment[]>>;
+  async redditComments(
+    params: RedditCommentsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<RedditComment[]>;
+  async redditComments(
+    params: RedditCommentsParams,
+    options: DesearchRequestOptions
+  ): Promise<RedditComment[] | DesearchResponse<RedditComment[]>>;
+  async redditComments(
+    params: RedditCommentsParams,
+    options?: DesearchRequestOptions
+  ): Promise<RedditComment[] | DesearchResponse<RedditComment[]>> {
+    return this.handleRequest<RedditComment[]>(
+      'GET',
+      this.socialPath('/desearch/reddit/comments', params.post_id),
+      { cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Search public Threads posts by keyword.
+   *
+   * Threads returns up to 10 posts per search and no further pages, so this method takes no cursor.
+   *
+   * @param payload - The search request including query and optional start_date and end_date (YYYY-MM-DD).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns An array of Threads posts, or a metadata wrapper when opted in.
+   */
+  async threadsSearch(
+    payload: ThreadsSearchRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<ThreadsPost[]>>;
+  async threadsSearch(
+    payload: ThreadsSearchRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<ThreadsPost[]>;
+  async threadsSearch(
+    payload: ThreadsSearchRequest,
+    options: DesearchRequestOptions
+  ): Promise<ThreadsPost[] | DesearchResponse<ThreadsPost[]>>;
+  async threadsSearch(
+    payload: ThreadsSearchRequest,
+    options?: DesearchRequestOptions
+  ): Promise<ThreadsPost[] | DesearchResponse<ThreadsPost[]>> {
+    return this.handleRequest<ThreadsPost[]>(
+      'POST',
+      '/desearch/threads/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Search public Threads accounts by username or name. Not paginated.
+   *
+   * @param payload - The search request containing the username or name to search for.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns An array of Threads users, or a metadata wrapper when opted in.
+   */
+  async threadsSearchUsers(
+    payload: ThreadsSearchUsersRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<ThreadsUser[]>>;
+  async threadsSearchUsers(
+    payload: ThreadsSearchUsersRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<ThreadsUser[]>;
+  async threadsSearchUsers(
+    payload: ThreadsSearchUsersRequest,
+    options: DesearchRequestOptions
+  ): Promise<ThreadsUser[] | DesearchResponse<ThreadsUser[]>>;
+  async threadsSearchUsers(
+    payload: ThreadsSearchUsersRequest,
+    options?: DesearchRequestOptions
+  ): Promise<ThreadsUser[] | DesearchResponse<ThreadsUser[]>> {
+    return this.handleRequest<ThreadsUser[]>(
+      'POST',
+      '/desearch/threads/search/users',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Threads profile: bio, followers, verification and links.
+   *
+   * @param params - Object containing the Threads username without @.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Threads profile, or a metadata wrapper when opted in.
+   */
+  async threadsProfile(
+    params: ThreadsProfileParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<ThreadsProfile>>;
+  async threadsProfile(
+    params: ThreadsProfileParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<ThreadsProfile>;
+  async threadsProfile(
+    params: ThreadsProfileParams,
+    options: DesearchRequestOptions
+  ): Promise<ThreadsProfile | DesearchResponse<ThreadsProfile>>;
+  async threadsProfile(
+    params: ThreadsProfileParams,
+    options?: DesearchRequestOptions
+  ): Promise<ThreadsProfile | DesearchResponse<ThreadsProfile>> {
+    return this.handleRequest<ThreadsProfile>(
+      'GET',
+      this.socialPath('/desearch/threads/profile', params.username),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a Threads account's latest public posts.
+   *
+   * Threads shows only the latest 20-30 posts publicly, so there are no further pages and no cursor.
+   *
+   * @param params - Object containing the Threads username without @.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns An array of Threads posts, or a metadata wrapper when opted in.
+   */
+  async threadsProfilePosts(
+    params: ThreadsProfilePostsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<ThreadsPost[]>>;
+  async threadsProfilePosts(
+    params: ThreadsProfilePostsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<ThreadsPost[]>;
+  async threadsProfilePosts(
+    params: ThreadsProfilePostsParams,
+    options: DesearchRequestOptions
+  ): Promise<ThreadsPost[] | DesearchResponse<ThreadsPost[]>>;
+  async threadsProfilePosts(
+    params: ThreadsProfilePostsParams,
+    options?: DesearchRequestOptions
+  ): Promise<ThreadsPost[] | DesearchResponse<ThreadsPost[]>> {
+    return this.handleRequest<ThreadsPost[]>(
+      'GET',
+      this.socialPath('/desearch/threads/profile', params.username, '/posts'),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Retrieve a public Threads post by URL or shortcode, with the replies and thread continuation posts returned alongside it.
+   *
+   * @param params - Object containing the post URL or shortcode (URL-encoded into the path).
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns The Threads post with `comments` and `threadItems`, or a metadata wrapper when opted in.
+   */
+  async threadsPostById(
+    params: ThreadsPostByIdParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<ThreadsPostDetail>>;
+  async threadsPostById(
+    params: ThreadsPostByIdParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<ThreadsPostDetail>;
+  async threadsPostById(
+    params: ThreadsPostByIdParams,
+    options: DesearchRequestOptions
+  ): Promise<ThreadsPostDetail | DesearchResponse<ThreadsPostDetail>>;
+  async threadsPostById(
+    params: ThreadsPostByIdParams,
+    options?: DesearchRequestOptions
+  ): Promise<ThreadsPostDetail | DesearchResponse<ThreadsPostDetail>> {
+    return this.handleRequest<ThreadsPostDetail>(
+      'GET',
+      this.socialPath('/desearch/threads/post', params.id),
+      undefined,
       options
     );
   }

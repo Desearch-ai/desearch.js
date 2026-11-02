@@ -24,8 +24,12 @@ import type {
   PeopleTaskWarning,
   Person,
   PersonAttributes,
+  RedditTimeframe,
   SearchApiMode,
+  ThreadsPostDetail,
   TikTokPost,
+  YouTubeSearchType,
+  YouTubeVideo,
 } from './index';
 
 vi.mock('undici', () => ({
@@ -1610,6 +1614,415 @@ describe('Social routes (TikTok, Facebook, Instagram)', () => {
     // @ts-expect-error result types are profile, hashtag or media
     const badKind: InstagramSearchResultType = 'reel';
     expect([igSearch, trending, profile, kind, badKind]).toHaveLength(5);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('YouTube, Reddit and Threads', () => {
+  const API = 'https://api.desearch.ai';
+
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  it.each([
+    {
+      name: 'youtubeSearch',
+      call: (c: Desearch) =>
+        c.youtubeSearch({
+          query: 'bittensor',
+          type: 'videos',
+          upload_date: 'this_month',
+          sort_by: 'popular',
+          duration: 'over_20_min',
+          cursor: 'c1',
+        }),
+      path: '/desearch/youtube/search',
+      body: {
+        query: 'bittensor',
+        type: 'videos',
+        upload_date: 'this_month',
+        sort_by: 'popular',
+        duration: 'over_20_min',
+        cursor: 'c1',
+      },
+    },
+    {
+      name: 'youtubeSearch (query only)',
+      call: (c: Desearch) => c.youtubeSearch({ query: 'bittensor' }),
+      path: '/desearch/youtube/search',
+      body: { query: 'bittensor' },
+    },
+    {
+      name: 'redditSearch',
+      call: (c: Desearch) =>
+        c.redditSearch({
+          query: 'bittensor',
+          sort: 'top',
+          timeframe: 'week',
+          cursor: 'c1',
+        }),
+      path: '/desearch/reddit/search',
+      body: { query: 'bittensor', sort: 'top', timeframe: 'week', cursor: 'c1' },
+    },
+    {
+      name: 'threadsSearch',
+      call: (c: Desearch) =>
+        c.threadsSearch({
+          query: 'bittensor',
+          start_date: '2026-01-01',
+          end_date: '2026-10-30',
+        }),
+      path: '/desearch/threads/search',
+      body: {
+        query: 'bittensor',
+        start_date: '2026-01-01',
+        end_date: '2026-10-30',
+      },
+    },
+    {
+      name: 'threadsSearchUsers',
+      call: (c: Desearch) => c.threadsSearchUsers({ query: 'zuck' }),
+      path: '/desearch/threads/search/users',
+      body: { query: 'zuck' },
+    },
+  ])('$name posts its JSON body to $path', async ({ call, path, body }) => {
+    mockResponse({ body: [] });
+
+    const client = new Desearch('test-key');
+    await expect(call(client)).resolves.toEqual([]);
+
+    const sent = fetchCall(0);
+    expect(sent.url).toBe(`${API}${path}`);
+    expect(sent.method).toBe('POST');
+    expect(sent.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(sent.body!)).toEqual(body);
+  });
+
+  it.each([
+    {
+      name: 'youtubeVideo',
+      call: (c: Desearch) => c.youtubeVideo({ id: 'dQw4w9WgXcQ' }),
+      url: '/desearch/youtube/video/dQw4w9WgXcQ',
+    },
+    {
+      name: 'youtubeTranscript',
+      call: (c: Desearch) =>
+        c.youtubeTranscript({ video_id: 'dQw4w9WgXcQ', language: 'en' }),
+      url: '/desearch/youtube/transcript/dQw4w9WgXcQ?language=en',
+    },
+    {
+      name: 'youtubeComments',
+      call: (c: Desearch) =>
+        c.youtubeComments({
+          video_id: 'dQw4w9WgXcQ',
+          order: 'newest',
+          cursor: 'c1',
+        }),
+      url: '/desearch/youtube/comments/dQw4w9WgXcQ?order=newest&cursor=c1',
+    },
+    {
+      name: 'youtubeChannel',
+      call: (c: Desearch) => c.youtubeChannel({ handle: 'MrBeast' }),
+      url: '/desearch/youtube/channel/MrBeast',
+    },
+    {
+      name: 'youtubeChannelVideos',
+      call: (c: Desearch) =>
+        c.youtubeChannelVideos({
+          handle: 'UCX6OQ3DkcsbYNE6H8uQQuVA',
+          sort: 'popular',
+          cursor: 'c1',
+        }),
+      url: '/desearch/youtube/channel/UCX6OQ3DkcsbYNE6H8uQQuVA/videos?sort=popular&cursor=c1',
+    },
+    {
+      name: 'redditSubreddit',
+      call: (c: Desearch) => c.redditSubreddit({ name: 'AskReddit' }),
+      url: '/desearch/reddit/subreddit/AskReddit',
+    },
+    {
+      name: 'redditSubredditPosts',
+      call: (c: Desearch) =>
+        c.redditSubredditPosts({
+          name: 'AskReddit',
+          sort: 'top',
+          timeframe: 'week',
+          cursor: 'c1',
+        }),
+      url: '/desearch/reddit/subreddit/AskReddit/posts?sort=top&timeframe=week&cursor=c1',
+    },
+    {
+      name: 'redditPostById',
+      call: (c: Desearch) => c.redditPostById({ id: 't3_1q6pxwn' }),
+      url: '/desearch/reddit/post/t3_1q6pxwn',
+    },
+    {
+      name: 'redditComments',
+      call: (c: Desearch) =>
+        c.redditComments({ post_id: '1q6pxwn', cursor: 'c1' }),
+      url: '/desearch/reddit/comments/1q6pxwn?cursor=c1',
+    },
+    {
+      name: 'threadsProfile',
+      call: (c: Desearch) => c.threadsProfile({ username: 'zuck' }),
+      url: '/desearch/threads/profile/zuck',
+    },
+    {
+      name: 'threadsProfilePosts',
+      call: (c: Desearch) => c.threadsProfilePosts({ username: 'zuck' }),
+      url: '/desearch/threads/profile/zuck/posts',
+    },
+    {
+      name: 'threadsPostById',
+      call: (c: Desearch) => c.threadsPostById({ id: 'DK-BydcJHkF' }),
+      url: '/desearch/threads/post/DK-BydcJHkF',
+    },
+  ])('$name sends GET $url', async ({ call, url }) => {
+    const payload = { id: '1' };
+    mockResponse({ body: payload });
+
+    const client = new Desearch('test-key');
+    await expect(call(client)).resolves.toEqual(payload);
+
+    const sent = fetchCall(0);
+    expect(sent.url).toBe(`${API}${url}`);
+    expect(sent.method).toBe('GET');
+    expect(sent.body).toBeUndefined();
+    expect(sent.headers).toEqual({ Authorization: 'test-key' });
+  });
+
+  it('leaves unset and null options out of the query and the body', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      mockResponse({ body: [] });
+    }
+
+    const client = new Desearch('test-key');
+    await client.youtubeTranscript({ video_id: 'dQw4w9WgXcQ' });
+    await client.youtubeComments({ video_id: 'dQw4w9WgXcQ', cursor: null });
+    await client.youtubeChannelVideos({ handle: 'MrBeast', sort: null });
+    await client.redditSubredditPosts({ name: 'AskReddit', sort: 'hot' });
+    await client.redditSearch({ query: 'ai', sort: undefined, cursor: null });
+
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/youtube/transcript/dQw4w9WgXcQ`
+    );
+    expect(fetchCall(1).url).toBe(`${API}/desearch/youtube/comments/dQw4w9WgXcQ`);
+    expect(fetchCall(2).url).toBe(
+      `${API}/desearch/youtube/channel/MrBeast/videos`
+    );
+    expect(fetchCall(3).url).toBe(
+      `${API}/desearch/reddit/subreddit/AskReddit/posts?sort=hot`
+    );
+    // JSON.stringify drops undefined; null is sent as null, which the API treats as unset.
+    expect(JSON.parse(fetchCall(4).body!)).toEqual({ query: 'ai', cursor: null });
+  });
+
+  it('URL-encodes path params, so post and video URLs reach the API as one value', async () => {
+    for (let i = 0; i < 6; i += 1) {
+      mockResponse({ body: {} });
+    }
+
+    const client = new Desearch('test-key');
+    const ytUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const redditUrl =
+      'https://www.reddit.com/r/webscraping/comments/1q6pxwn/just_started/';
+    const threadsUrl = 'https://www.threads.com/@zuck/post/DK-BydcJHkF';
+    await client.youtubeVideo({ id: ytUrl });
+    await client.youtubeTranscript({ video_id: 'https://youtu.be/dQw4w9WgXcQ' });
+    await client.youtubeChannel({ handle: '@MrBeast' });
+    await client.redditPostById({ id: redditUrl });
+    await client.redditComments({ post_id: redditUrl, cursor: 'c1' });
+    await client.threadsPostById({ id: threadsUrl });
+
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/youtube/video/https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DdQw4w9WgXcQ`,
+      `${API}/desearch/youtube/transcript/https%3A%2F%2Fyoutu.be%2FdQw4w9WgXcQ`,
+      `${API}/desearch/youtube/channel/%40MrBeast`,
+      `${API}/desearch/reddit/post/https%3A%2F%2Fwww.reddit.com%2Fr%2Fwebscraping%2Fcomments%2F1q6pxwn%2Fjust_started%2F`,
+      `${API}/desearch/reddit/comments/https%3A%2F%2Fwww.reddit.com%2Fr%2Fwebscraping%2Fcomments%2F1q6pxwn%2Fjust_started%2F?cursor=c1`,
+      `${API}/desearch/threads/post/https%3A%2F%2Fwww.threads.com%2F%40zuck%2Fpost%2FDK-BydcJHkF`,
+    ]);
+    const lastSegment = (index: number) =>
+      decodeURIComponent(
+        new URL(fetchCall(index).url).pathname.split('/').pop()!
+      );
+    expect(lastSegment(0)).toBe(ytUrl);
+    expect(new URL(fetchCall(0).url).search).toBe('');
+    expect(lastSegment(2)).toBe('@MrBeast');
+    expect(lastSegment(3)).toBe(redditUrl);
+    expect(lastSegment(5)).toBe(threadsUrl);
+  });
+
+  it('sends a cursor back exactly as received, in the body of searches and the query of GET routes', async () => {
+    const cursor = 'eyJ2IjoxLCJyb3V0ZSI6Ii9kZXNlYXJjaC95b3V0dWJlIn0.c2ln-_=';
+    for (let i = 0; i < 4; i += 1) {
+      mockResponse({ body: [] });
+    }
+
+    const client = new Desearch('test-key');
+    await client.youtubeSearch({ query: 'ai', cursor });
+    await client.redditSearch({ query: 'ai', cursor });
+    await client.youtubeChannelVideos({ handle: 'MrBeast', cursor });
+    await client.redditSubredditPosts({ name: 'AskReddit', cursor });
+
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({ query: 'ai', cursor });
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({ query: 'ai', cursor });
+    expect(new URL(fetchCall(2).url).searchParams.get('cursor')).toBe(cursor);
+    expect(new URL(fetchCall(3).url).searchParams.get('cursor')).toBe(cursor);
+  });
+
+  it('returns nextCursor and cost metadata from the headers when opted in, and the raw array by default', async () => {
+    const videos = [{ id: 'a', type: 'video' }];
+    const headers = {
+      'X-Desearch-Cost-Usd': '0.00207',
+      'X-Desearch-Usage-Count': '1',
+      'X-Desearch-Service': 'youtube_channel_videos',
+      'X-Desearch-Currency': 'USD',
+      'x-desearch-next-cursor': 'eyJ2IjoxfQ.c2ln',
+    };
+    mockResponse({ body: videos, headers });
+    mockResponse({ body: videos, headers });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.youtubeChannelVideos({ handle: 'MrBeast' })
+    ).resolves.toEqual(videos);
+    await expect(
+      client.youtubeChannelVideos(
+        { handle: 'MrBeast' },
+        { includeMetadata: true }
+      )
+    ).resolves.toEqual({
+      data: videos,
+      metadata: {
+        costUsd: 0.00207,
+        usageCount: 1,
+        service: 'youtube_channel_videos',
+        currency: 'USD',
+        nextCursor: 'eyJ2IjoxfQ.c2ln',
+      },
+    });
+  });
+
+  it('pages through Reddit comments by following nextCursor until it is absent', async () => {
+    mockResponse({
+      body: [{ id: 'a', depth: 0, replies: [{ id: 'a1', depth: 1 }] }],
+      headers: { 'x-desearch-next-cursor': 'cur-1' },
+    });
+    mockResponse({ body: [{ id: 'b', depth: 0, replies: [] }] });
+
+    const client = new Desearch('test-key');
+    const ids: (string | null | undefined)[] = [];
+    let cursor: string | undefined;
+    do {
+      const { data, metadata } = await client.redditComments(
+        { post_id: '1q6pxwn', cursor },
+        { includeMetadata: true }
+      );
+      for (const comment of data) {
+        ids.push(comment.id, ...(comment.replies ?? []).map((r) => r.id));
+      }
+      cursor = metadata.nextCursor;
+    } while (cursor);
+
+    expect(ids).toEqual(['a', 'a1', 'b']);
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/reddit/comments/1q6pxwn`,
+      `${API}/desearch/reddit/comments/1q6pxwn?cursor=cur-1`,
+    ]);
+  });
+
+  it('returns typed objects for the single-item routes', async () => {
+    const video: YouTubeVideo = {
+      id: 'dQw4w9WgXcQ',
+      type: 'video',
+      channel: { id: 'UCuAXFkgsw1L7xaCfnd5JJOw', handle: 'RickAstleyYT' },
+      captionLanguages: [{ languageCode: 'en', autoGenerated: false }],
+      keywords: [],
+      chapters: [],
+    };
+    const post: ThreadsPostDetail = {
+      code: 'DK-BydcJHkF',
+      author: { username: 'zuck', verified: true },
+      comments: [{ code: 'DK-reply', text: 'nice' }],
+      threadItems: [],
+    };
+    mockResponse({ body: video, headers: { 'X-Desearch-Usage-Count': '1' } });
+    mockResponse({ body: post });
+
+    const client = new Desearch('test-key');
+    const yt = await client.youtubeVideo(
+      { id: 'dQw4w9WgXcQ' },
+      { includeMetadata: true }
+    );
+    const th = await client.threadsPostById({ id: 'DK-BydcJHkF' });
+    expect(yt.data.channel?.handle).toBe('RickAstleyYT');
+    expect(yt.data.captionLanguages?.[0]?.languageCode).toBe('en');
+    expect(yt.metadata).toEqual({ usageCount: 1 });
+    expect(th.author?.username).toBe('zuck');
+    expect(th.comments?.[0]?.text).toBe('nice');
+  });
+
+  it('surfaces an invalid cursor (422) and a video without captions (404) as HTTP errors', async () => {
+    mockResponse({
+      body: '{"detail":"Invalid request parameters"}',
+      ok: false,
+      status: 422,
+    });
+    mockResponse({
+      body: '{"detail":"Transcript not found"}',
+      ok: false,
+      status: 404,
+    });
+    mockResponse({
+      body: '{"detail":[{"loc":["body","query"],"msg":"String should have at least 1 character","type":"string_too_short"}]}',
+      ok: false,
+      status: 422,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.redditSearch({ query: 'ai', cursor: 'tampered' })
+    ).rejects.toThrow('HTTP 422: {"detail":"Invalid request parameters"}');
+    await expect(
+      client.youtubeTranscript({ video_id: 'no-captions' })
+    ).rejects.toThrow('HTTP 404: {"detail":"Transcript not found"}');
+    await expect(client.threadsSearch({ query: '' })).rejects.toThrow(
+      'HTTP 422:'
+    );
+  });
+
+  it('types the requests to what each route accepts', () => {
+    const client = new Desearch('test-key');
+    // Type-only checks: these calls are never awaited or sent.
+    const threads = () =>
+      client.threadsSearch({
+        query: 'ai',
+        // @ts-expect-error Threads search does not paginate
+        cursor: 'c1',
+      });
+    const threadsPosts = () =>
+      client.threadsProfilePosts({
+        username: 'zuck',
+        // @ts-expect-error Threads profile posts do not paginate
+        cursor: 'c1',
+      });
+    const comments = () =>
+      client.youtubeComments({
+        video_id: 'dQw4w9WgXcQ',
+        // @ts-expect-error the YouTube and Reddit routes take no count
+        count: 5,
+      });
+    const searchType: YouTubeSearchType = 'shorts';
+    // @ts-expect-error search types are plural (videos, shorts, channels, playlists)
+    const badType: YouTubeSearchType = 'video';
+    const timeframe: RedditTimeframe = 'month';
+    expect([threads, threadsPosts, comments, searchType, badType, timeframe])
+      .toHaveLength(6);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

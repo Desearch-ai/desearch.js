@@ -1,9 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.12.0
 
 Covers the rest of the public API. New methods only; no existing method changed.
 
+- Added YouTube: `youtubeSearch`, `youtubeVideo`, `youtubeTranscript`, `youtubeComments`, `youtubeChannel` and `youtubeChannelVideos`.
+- Added Reddit: `redditSearch`, `redditSubreddit`, `redditSubredditPosts`, `redditPostById` and `redditComments` (a comment tree with the replies Reddit loaded).
+- Added Threads: `threadsSearch`, `threadsSearchUsers`, `threadsProfile`, `threadsProfilePosts` and `threadsPostById` (with replies and thread continuation posts).
+- The paginated YouTube and Reddit methods take `cursor` and return the next one as `metadata.nextCursor`, like the TikTok, Facebook and Instagram methods. They take no `count`. Threads methods do not paginate.
+- Added the request and response types for these routes (`YouTubeItem`, `YouTubeVideo`, `YouTubeTranscript`, `YouTubeComment`, `YouTubeChannel`, `RedditPost`, `RedditSubreddit`, `RedditComment`, `ThreadsPost`, `ThreadsPostDetail`, `ThreadsProfile`, `ThreadsUser`, `SocialCursorParams` and the filter unions).
+- Added `scripts/e2e-youtube-reddit-threads.mjs`, a live smoke test of these methods that takes `--base-url` and `--key-env`.
 - Added TikTok: `tiktokSearch`, `tiktokPostById`, `tiktokProfile`, `tiktokProfilePosts`, `tiktokComments`, `tiktokHashtag` and `tiktokTrending`.
 - Added Facebook: `facebookSearch`, `facebookPostById`, `facebookProfile`, `facebookProfilePosts`, `facebookComments` and `facebookHashtag`. Search and hashtag read the Meta Ad Library.
 - Added Instagram: `instagramSearch`, `instagramMedia`, `instagramProfile`, `instagramProfilePosts`, `instagramComments` and `instagramHashtag`.

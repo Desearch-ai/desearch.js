@@ -20,6 +20,7 @@ What it covers today:
 - AI X-links search
 - X search and lookup endpoints
 - TikTok, Facebook and Instagram search, profiles, posts, comments and hashtags
+- YouTube search, videos, transcripts, comments and channels; Reddit search, subreddits, posts and comment trees; Threads search, profiles and posts
 - web search and the Search API (ranked pages with the best passage)
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
@@ -131,6 +132,31 @@ The SDK sends that value as the `Authorization` header on every request.
 - `instagramProfilePosts(params)` → `GET /desearch/instagram/profile/{username}/posts` (paginated)
 - `instagramComments(params)` → `GET /desearch/instagram/comments/{shortcode}` (paginated)
 - `instagramHashtag(params)` → `GET /desearch/instagram/hashtag/{tag}` (paginated)
+
+### YouTube methods
+
+- `youtubeSearch(payload)` → `POST /desearch/youtube/search` (videos, Shorts, live streams, channels and playlists; paginated)
+- `youtubeVideo(params)` → `GET /desearch/youtube/video/{id}`
+- `youtubeTranscript(params)` → `GET /desearch/youtube/transcript/{video_id}`
+- `youtubeComments(params)` → `GET /desearch/youtube/comments/{video_id}` (paginated)
+- `youtubeChannel(params)` → `GET /desearch/youtube/channel/{handle}`
+- `youtubeChannelVideos(params)` → `GET /desearch/youtube/channel/{handle}/videos` (paginated)
+
+### Reddit methods
+
+- `redditSearch(payload)` → `POST /desearch/reddit/search` (paginated)
+- `redditSubreddit(params)` → `GET /desearch/reddit/subreddit/{name}`
+- `redditSubredditPosts(params)` → `GET /desearch/reddit/subreddit/{name}/posts` (paginated)
+- `redditPostById(params)` → `GET /desearch/reddit/post/{id}`
+- `redditComments(params)` → `GET /desearch/reddit/comments/{post_id}` (comment tree; paginated)
+
+### Threads methods
+
+- `threadsSearch(payload)` → `POST /desearch/threads/search` (up to 10 posts, no cursor)
+- `threadsSearchUsers(payload)` → `POST /desearch/threads/search/users`
+- `threadsProfile(params)` → `GET /desearch/threads/profile/{username}`
+- `threadsProfilePosts(params)` → `GET /desearch/threads/profile/{username}/posts` (latest 20-30 posts, no cursor)
+- `threadsPostById(params)` → `GET /desearch/threads/post/{id}` (with replies and thread continuation posts)
 
 See [Social pagination](#social-pagination) for the cursor flow.
 
@@ -325,6 +351,37 @@ Notes:
 - Facebook search and hashtag read the public Meta Ad Library. Organic Facebook post search is not available.
 - Fields the provider does not send are left out of each object, so every field of `TikTokPost`, `FacebookPost`, `InstagramMedia` and the other social types is optional.
 
+### YouTube, Reddit and Threads
+
+```ts
+const videos = await client.youtubeSearch({ query: 'bittensor', type: 'videos', upload_date: 'this_month' });
+const video = await client.youtubeVideo({ id: 'https://youtu.be/dQw4w9WgXcQ' });
+const transcript = await client.youtubeTranscript({ video_id: 'dQw4w9WgXcQ', language: 'en' });
+const ytComments = await client.youtubeComments({ video_id: 'dQw4w9WgXcQ', order: 'top' });
+const channel = await client.youtubeChannel({ handle: '@MrBeast' });
+const uploads = await client.youtubeChannelVideos({ handle: '@MrBeast', sort: 'popular' });
+
+const redditPosts = await client.redditSearch({ query: 'bittensor', sort: 'new', timeframe: 'month' });
+const subreddit = await client.redditSubreddit({ name: 'AskReddit' });
+const top = await client.redditSubredditPosts({ name: 'AskReddit', sort: 'top', timeframe: 'week' });
+const redditPost = await client.redditPostById({ id: '1q6pxwn' });
+const tree = await client.redditComments({ post_id: '1q6pxwn' });
+
+const threads = await client.threadsSearch({ query: 'bittensor', start_date: '2026-01-01' });
+const accounts = await client.threadsSearchUsers({ query: 'zuck' });
+const threadsProfile = await client.threadsProfile({ username: 'zuck' });
+const latest = await client.threadsProfilePosts({ username: 'zuck' });
+const thread = await client.threadsPostById({ id: 'https://www.threads.com/@zuck/post/DK-BydcJHkF' });
+```
+
+Notes:
+- These routes take no `count`: each call returns one provider page. Every request is billed as one unit ($2.07 per 1,000), including an empty page the provider charged for. A 404 (for example a video without captions) and a 422 are not charged.
+- Video, post and comment IDs can be full URLs; the SDK URL-encodes them into the path.
+- `youtubeSearch` items have a `type` (`video`, `short`, `live`, `channel` or `playlist`) and the fields of that type. Channel and playlist results have no `url`.
+- Subreddit names are case-sensitive (`AskReddit`, not `askreddit`). `timeframe` on `redditSubredditPosts` applies to `sort: 'top'`.
+- `redditComments` returns top-level comments with the `replies` Reddit loaded alongside them; `hasMoreReplies` is true when there are more.
+- Threads routes do not paginate. `threadsPostById` returns the post with `comments` (public replies) and `threadItems` (the author's continuation posts).
+
 ### Social pagination
 
 The paginated social methods return a JSON array. The cursor for the next page comes in the `x-desearch-next-cursor` response header, which the SDK returns as `metadata.nextCursor` when you pass `{ includeMetadata: true }`. Send it back unchanged as `cursor`, with the same target (username, tag, post or query), to read the next page. On the last page there is no cursor.
@@ -348,8 +405,8 @@ do {
 
 - A cursor is opaque. Do not build or change one; send back exactly what you got.
 - A cursor is valid for 24 hours, on the same method and target. An expired, changed or other-target cursor fails with `HTTP 422` and is not charged.
-- The searches (`tiktokSearch`, `facebookSearch`) take `cursor` in the request body; the other paginated methods send it as a query parameter. The SDK handles both.
-- `instagramSearch` and `tiktokTrending` return one page and take no cursor.
+- The searches (`tiktokSearch`, `facebookSearch`, `youtubeSearch`, `redditSearch`) take `cursor` in the request body; the other paginated methods send it as a query parameter. The SDK handles both.
+- `instagramSearch`, `tiktokTrending` and the Threads methods return one page and take no cursor.
 - Items repeated from the previous page are dropped and not charged again.
 
 ### Network stats
@@ -828,6 +885,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 | `npm run publish:beta` | Version, build, and publish with the `beta` npm tag |
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
+| `node scripts/e2e-youtube-reddit-threads.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the 16 YouTube, Reddit and Threads methods, with page 2 of each paginated one (billed, about $0.05; run `npm run build` first). Reads the key from `DESEARCH_API_KEY`, or the variable `--key-env` names, or `~/.config/desearch/e2e.env`. |
 | `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the TikTok, Facebook, Instagram, Search API and network stats methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview

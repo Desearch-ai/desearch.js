@@ -2145,7 +2145,7 @@ export class Desearch {
   /**
    * Search public Threads posts by keyword.
    *
-   * Threads returns up to 10 posts per search and no further pages, so this method takes no cursor.
+   * Threads returns one page of posts per search and no further pages, so this method takes no cursor.
    *
    * @param payload - The search request including query and optional start_date and end_date (YYYY-MM-DD).
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.

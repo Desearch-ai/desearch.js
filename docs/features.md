@@ -88,7 +88,7 @@ Status legend:
 | `redditSubredditPosts` | `GET /desearch/reddit/subreddit/{name}/posts` | ✅ | Paginated; `sort`, `timeframe`. |
 | `redditPostById` | `GET /desearch/reddit/post/{id}` | ✅ | ID or URL; no comments. |
 | `redditComments` | `GET /desearch/reddit/comments/{post_id}` | ✅ | Comment tree; paginated. |
-| `threadsSearch` | `POST /desearch/threads/search` | ✅ | Up to 10 posts; no cursor. |
+| `threadsSearch` | `POST /desearch/threads/search` | ✅ | One page; no cursor. |
 | `threadsSearchUsers` | `POST /desearch/threads/search/users` | ✅ | Accounts by username or name. |
 | `threadsProfile` | `GET /desearch/threads/profile/{username}` | ✅ | Single profile. |
 | `threadsProfilePosts` | `GET /desearch/threads/profile/{username}/posts` | ✅ | Latest 20-30 posts; no cursor. |

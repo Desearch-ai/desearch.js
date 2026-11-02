@@ -152,7 +152,7 @@ The SDK sends that value as the `Authorization` header on every request.
 
 ### Threads methods
 
-- `threadsSearch(payload)` → `POST /desearch/threads/search` (up to 10 posts, no cursor)
+- `threadsSearch(payload)` → `POST /desearch/threads/search` (one page, no cursor)
 - `threadsSearchUsers(payload)` → `POST /desearch/threads/search/users`
 - `threadsProfile(params)` → `GET /desearch/threads/profile/{username}`
 - `threadsProfilePosts(params)` → `GET /desearch/threads/profile/{username}/posts` (latest 20-30 posts, no cursor)

@@ -1968,7 +1968,7 @@ export interface RedditComment {
 // Threads Types
 // ============================================================================
 
-/** Threads search returns up to 10 posts and does not paginate, so it takes no `cursor`. */
+/** Threads search returns one page of posts and does not paginate, so it takes no `cursor`. */
 export interface ThreadsSearchRequest {
   /** Keyword or phrase to search on Threads (1-500 characters) */
   query: string;

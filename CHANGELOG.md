@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Covers the rest of the public API. New methods only; no existing method changed.
+
+- Added TikTok: `tiktokSearch`, `tiktokPostById`, `tiktokProfile`, `tiktokProfilePosts`, `tiktokComments`, `tiktokHashtag` and `tiktokTrending`.
+- Added Facebook: `facebookSearch`, `facebookPostById`, `facebookProfile`, `facebookProfilePosts`, `facebookComments` and `facebookHashtag`. Search and hashtag read the Meta Ad Library.
+- Added Instagram: `instagramSearch`, `instagramMedia`, `instagramProfile`, `instagramProfilePosts`, `instagramComments` and `instagramHashtag`.
+- Added `searchApi` (`POST /search`): ranked pages, each with the passage that best matches the query.
+- Added `networkStats`, `networkStatsHistory` and `streamNetworkStats`, an async iterator over the live Server-Sent Events stream (`lastEventId` to replay missed snapshots, `signal` to stop). These routes need no API key, and the SDK sends none.
+- Added `nextCursor` to the response metadata, read from the `x-desearch-next-cursor` header. Social list methods take `cursor`: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back unchanged for the next page. It is absent on the last page.
+- Path parameters are URL-encoded. IDs and post URLs that contain `/` (for example `Meta/posts/123`) work on the post, media and comments routes.
+- Added the request and response types for these routes (`TikTokPost`, `FacebookPost`, `InstagramMedia`, `SearchApiResponse`, `NetworkStatsResponse` and others).
+- Added `scripts/e2e-full-coverage.mjs`, a live smoke test of the new methods.
+
 ## 1.11.0
 
 - Added Company Search and Company Enrich. Two billed methods start a background task: `companySearch` (companies found on the web from a description, with an AI fit score) and `companyEnrich` (the same data for up to 200 domains you send; `score` is null). Pass `idempotencyKey` to send an `Idempotency-Key` header.

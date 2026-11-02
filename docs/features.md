@@ -30,6 +30,9 @@ Status legend:
 | Company Search polling and iteration helpers | ✅ | `src/index.ts` `waitForCompanyTask`, `iterCompanyResults` | Polls a task with an interval and timeout; iterates companies by `next_cursor`. No AbortSignal. |
 | Company Search idempotent creates | ✅ | `src/index.ts` `companySearch`, `companyEnrich` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
 | Streaming AI responses | ❌ | `aiSearch` forces `streaming: false` | The SDK does not surface streamed results. |
+| Streaming network stats (Server-Sent Events) | ✅ | `src/index.ts` `streamNetworkStats`, `SseParser` | Async iterator over `stats` events; `lastEventId` replays missed snapshots, `signal` stops it. No automatic reconnect. |
+| Social cursor pagination | ✅ | `src/index.ts` `parseResponseMetadata` | `x-desearch-next-cursor` is returned as `metadata.nextCursor` with `{ includeMetadata: true }`; social list methods take `cursor`. |
+| URL-encoded path parameters | ✅ | `src/index.ts` `socialPath`, `peopleTaskPath` | IDs and post URLs that contain `/` reach the `{id:path}` routes as one value. |
 | Browser-first transport abstraction | ❌ | `import { fetch } from 'undici'` | Current transport choice is explicitly Node-oriented. |
 
 ## Public method inventory
@@ -51,6 +54,29 @@ Status legend:
 | `webSearch` | `GET /web` | ✅ | SERP-style web search wrapper. |
 | `extract` | `GET /web/extract` | ✅ | Canonical Extract API method; returns non-JSON text or HTML content. |
 | `webCrawl` | `GET /web/crawl` | ⚠️ legacy | Deprecated compatibility method for existing clients. |
+| `searchApi` | `POST /search` | ✅ | Ranked pages with the best-matching passage; cost fields in the body. |
+| `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body. |
+| `tiktokPostById` | `GET /desearch/tiktok/post/{id}` | ✅ | `id` URL-encoded into the path. |
+| `tiktokProfile` | `GET /desearch/tiktok/profile/{username}` | ✅ | Single profile. |
+| `tiktokProfilePosts` | `GET /desearch/tiktok/profile/{username}/posts` | ✅ | Paginated. |
+| `tiktokComments` | `GET /desearch/tiktok/comments/{video_id}` | ✅ | Paginated. |
+| `tiktokHashtag` | `GET /desearch/tiktok/hashtag/{tag}` | ✅ | Paginated. |
+| `tiktokTrending` | `GET /desearch/tiktok/trending` | ✅ | One page per region; no cursor. |
+| `facebookSearch` | `POST /desearch/facebook/search` | ✅ | Meta Ad Library; paginated, `cursor` in the body. |
+| `facebookPostById` | `GET /desearch/facebook/post/{id}` | ✅ | IDs containing `/` work. |
+| `facebookProfile` | `GET /desearch/facebook/profile/{profile_id}` | ✅ | Profile or page. |
+| `facebookProfilePosts` | `GET /desearch/facebook/profile/{profile_id}/posts` | ✅ | Paginated. |
+| `facebookComments` | `GET /desearch/facebook/comments/{post_id}` | ✅ | Paginated; about 10 comments per provider page. |
+| `facebookHashtag` | `GET /desearch/facebook/hashtag/{tag}` | ✅ | Meta Ad Library; paginated. |
+| `instagramSearch` | `POST /desearch/instagram/search` | ✅ | One page; takes no cursor. |
+| `instagramMedia` | `GET /desearch/instagram/media/{id}` | ✅ | Shortcode, ID or post URL. |
+| `instagramProfile` | `GET /desearch/instagram/profile/{username}` | ✅ | Single profile. |
+| `instagramProfilePosts` | `GET /desearch/instagram/profile/{username}/posts` | ✅ | Paginated. |
+| `instagramComments` | `GET /desearch/instagram/comments/{shortcode}` | ✅ | Paginated; numeric media IDs return 404. |
+| `instagramHashtag` | `GET /desearch/instagram/hashtag/{tag}` | ✅ | Paginated. |
+| `networkStats` | `GET /network/stats` | ✅ | Public; no `Authorization` header is sent. |
+| `networkStatsHistory` | `GET /network/stats/history` | ✅ | Public; last 20 minutes, one point per second. |
+| `streamNetworkStats` | `GET /network/stats/stream` | ✅ | Public; async iterator over Server-Sent Events. |
 | `xProfileSearch` | `POST /desearch/people/search/x` | ✅ | Billed. Starts an X Profile Search task (HTTP 202). |
 | `youtubeCreatorSearch` | `POST /desearch/people/search/youtube` | ✅ | Billed. Starts a YouTube Creator Search task. |
 | `linkedinProfileSearch` | `POST /desearch/people/search/linkedin` | ✅ | Billed. Starts a LinkedIn Profile Search task. |
@@ -101,6 +127,15 @@ Status legend:
 - ✅ `XPostRepliesParams`
 - ✅ `XTrendsParams`
 
+### Social, Search API and network stats request types
+
+- ✅ `SocialPageParams` (`count`, `cursor`)
+- ✅ `TikTokSearchRequest`, `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
+- ✅ `FacebookSearchRequest`, `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
+- ✅ `InstagramSearchRequest` (no `cursor`), `InstagramMediaParams`, `InstagramProfileParams`, `InstagramProfilePostsParams`, `InstagramCommentsParams`, `InstagramHashtagParams`
+- ✅ `SearchApiRequest`, `SearchApiMode`
+- ✅ `StreamNetworkStatsOptions` (`lastEventId`, `signal`)
+
 ### People Search request types
 
 - ✅ `XProfileSearchRequest`, `YouTubeCreatorSearchRequest`, `LinkedInProfileSearchRequest`, `TikTokCreatorSearchRequest`
@@ -133,6 +168,12 @@ Status legend:
 - ✅ `PeopleCriterionCheck`, `PeopleCriterionVerdict` (score `criteria_checks`, `fully_verified`)
 - ✅ `PersonAttributes`, `PeopleEnrichmentError` (`attributes.enrichment`, `attributes.enrichment_error`)
 - ✅ `PeopleResultsPage`, `PeopleProfile`, `PersonFoundBy`, `PeopleProfilesPage`
+- ✅ `TikTokPost`, `TikTokProfile`, `TikTokComment`, `TikTokAuthor`, `TikTokStats`, `TikTokMusic`
+- ✅ `FacebookPost`, `FacebookProfile`, `FacebookComment`, `FacebookMedia`, `FacebookPostStats`
+- ✅ `InstagramMedia`, `InstagramProfile`, `InstagramComment`, `InstagramStats`, `InstagramSearchResult`, `InstagramSearchResultType`
+- ✅ `SearchApiResponse`, `SearchApiResult`
+- ✅ `NetworkStatsResponse`, `NetworkStatsRates`, `NetworkStatsHistoryResponse`, `NetworkStatsHistoryPoint`, `NetworkStatsStreamEvent`
+- ✅ `DesearchCostMetadata.nextCursor` (from `x-desearch-next-cursor`)
 - ✅ `CompanyTask`, `CompanySearchTask` (task plus reservation cost fields), `CompanyTaskList`, `CompanyTaskConflictResponse`, `CompanyTaskWarning`, `CompanyCompletionReason`, `CompanyTaskStage`, `CompanySearchType`, `CompanyPlatform`; statuses, links and `created_by` reuse the People Search types
 - ✅ `Company`, `CompanyEmail`, `CompanyEmailVerification`, `CompanyEmailChecks`, `CompanyPhone`, `CompanySocial`, `CompanyPage`, `CompanyLocation`, `CompanyPerson`, `CompanyPersonEvidence`, `CompanyPrimaryContact`, `CompanyContactCoverage`, `CompanyEnrichment`, `CompanyEnrichmentStages`, `CompanyEnrichmentError`, `CompanyScore` (its `criteria_checks` are `PeopleCriterionCheck`), `CompanyFoundBy`, `CompanyResultsPage`, plus the value unions (`CompanyEmailType`, `CompanyEmailVerificationStatus`, `CompanyContactSource`, `CompanyStageState`, ...). Result objects accept fields a newer API adds.
 
@@ -158,6 +199,8 @@ Status legend:
 ### What is solid today
 
 - typed wrappers for the current public read, search, and extraction endpoints
+- TikTok, Facebook and Instagram routes with cursor pagination through `metadata.nextCursor`
+- the Search API and the public network stats, including a live Server-Sent Events stream
 - People Search across X, YouTube, LinkedIn and TikTok, with task control, polling and pagination helpers
 - Company Search and Company Enrich, with task control, a polling helper and a company iterator
 - one predictable request path across all public methods

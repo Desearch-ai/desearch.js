@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.0
+
+Two optional Company Search request fields. No method changed; requests without them are sent as before.
+
+- Added `max_cost_usd` to `CompanySearchRequest`: a search budget in USD (more than 0, at most 100), at least what `count` reserves at the route price (below it the API answers 422). Without it, a search stops once it costs more than the companies it found pay for (`completion_reason` `cost_limit`, `coverage_limited: true`). With it, the whole budget is reserved and the search goes on until it delivers `count` or spends the budget. Its search effort is billed where the companies delivered do not cover it, up to the budget, even when it finds few companies or none. The unused part is returned.
+- Added `continue_from` to `CompanySearchRequest`: the `task_id` of an ended Company Search of yours. The new search leaves out every company that one excluded, delivered or held for review, so it only finds new ones. Send the same `query` and filters with the `count` still wanted. The API answers 409 while that task is running or paused and 404 when it is not your Company Search; both are plain `HTTP <status>` errors.
+- `CompanyTaskWarning.code` lists `scope_not_applied`: the query names the only companies wanted without their websites, so the search was not restricted. A query that names them with their websites ("Restrict this search to Acme (acme.com.au) and Beta (beta.co.uk). Return only those.") checks only those domains and ends `all_domains_processed`.
+- Documented `progress.effort_units` (budgeted searches only) and `progress.review` on `CompanyTask`.
+
 ## 1.12.0
 
 Covers the rest of the public API. New methods only; no existing method changed.

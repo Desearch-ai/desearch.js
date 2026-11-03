@@ -722,11 +722,41 @@ const csv = await client.exportCompanyResults({ task_id: task.task_id, format: '
 writeFileSync(`companies-${task.task_id}.csv`, csv);
 ```
 
-Company Search takes `query` (3-1000 characters), `count` (5-200, default 25), `min_score` (0-100), `exclude` (domains or URLs, up to 1000), `roles`, `infer_emails`, `verify_emails`, `filters` and `metadata`:
+Company Search takes `query` (3-1000 characters), `count` (5-200, default 25), `min_score` (0-100), `exclude` (domains or URLs, up to 1000), `roles`, `infer_emails`, `verify_emails`, `filters`, `max_cost_usd`, `continue_from` and `metadata`:
 
 - `roles`: any of `ceo`, `founder`, `cto`, `cfo`, `coo`, `cmo`, `president`, `owner`, `managing_director`. The default is `['ceo', 'founder', 'cto', 'cfo']`. A managing director (Geschäftsführer) counts as `ceo` when `ceo` is asked for.
 - `infer_emails` (default true) guesses leaders' emails from the company's address pattern, such as `first.last`. `verify_emails` (default true) checks every email.
 - `filters.countries` takes ISO 3166-1 alpha-2 codes or names (up to 20). `filters.require` takes `email`, `phone`, `linkedin`, `leader` and `leader_email`: a company that does not have them is not delivered and not billed.
+- `max_cost_usd` (more than 0, at most 100) is a search budget, and `continue_from` continues an ended search. See below.
+- To check only companies you name, give their websites in `query`: `Restrict this search to Acme (acme.com.au) and Beta (beta.co.uk). Return only those.` checks only those domains, with no web search. `interpreted.interpretation.only_domains` lists them and the task ends `all_domains_processed`. A query that names companies without their websites is not restricted: the search runs as usual with warning `scope_not_applied`.
+
+### Search budget and continuing a search
+
+Without a budget, a search stops once it costs more than the companies it found pay for. It then ends with `completion_reason` `cost_limit` and `coverage_limited: true`, so there may be more matching companies. There are two ways to look further:
+
+- `max_cost_usd` is your search budget in USD (more than 0, at most 100). It must be at least what `count` reserves at the route price; below that, the API answers 422. The whole budget is reserved, and the search goes on until it delivers `count` or spends the budget. Its search effort is billed where the companies delivered do not cover it, up to the budget, even when it finds few companies or none. The unused part is returned. `progress.effort_units` shows that effort. Set a budget only when you accept paying for search effort.
+- `continue_from` takes the `task_id` of an ended Company Search of yours. The new search leaves out every company that one excluded, delivered or held for review (`progress.review`), so it only finds new ones. Send the same `query` and filters with the `count` you still want. While that task is running or paused, the API answers 409. A task that is not your Company Search is a 404. Both are plain `HTTP <status>` errors.
+
+```ts
+const query = 'Family-owned civil engineering contractors in Western Australia';
+const filters = { countries: ['AU'] };
+
+const first = await client.waitForCompanyTask(
+  await client.companySearch({ query, filters, count: 50 }),
+);
+
+if (first.coverage_limited) {
+  // Same query and filters, the count still wanted (at least 5), and the companies of `first` left out.
+  const more = await client.companySearch({
+    query,
+    filters,
+    count: Math.max(5, 50 - first.result_count),
+    continue_from: first.task_id,
+    max_cost_usd: 10, // only when you accept paying for search effort
+  });
+  await client.waitForCompanyTask(more);
+}
+```
 
 ### Company Enrich
 
@@ -808,7 +838,7 @@ for await (const company of client.iterCompanyResults({ task_id: task.task_id })
 - `score` (Company Search) has `value`, `qualified`, `relevance`, `summary`, `matched_signals`, `reasons`, `concerns`, `criteria_checks` and `fully_verified`. `unverifiedCriteria` works on it as on a People Search score.
 - Result types accept fields a newer API adds, so a newer worker does not break your types.
 
-A finished task has `completion_reason`: People Search's reasons, plus `all_domains_processed` for Company Enrich. `coverage_limited` is true when a budget stopped it before `count`, and `warnings` lists what made part of it less reliable, such as `enrichment_time_limit`.
+A finished task has `completion_reason`: People Search's reasons, plus `all_domains_processed` for Company Enrich and for a search restricted to the domains its query names. `coverage_limited` is true when a budget stopped it before `count`, and `warnings` lists what made part of it less reliable, such as `enrichment_time_limit` or `scope_not_applied`.
 
 ### Pricing
 
@@ -817,6 +847,7 @@ Company Search and Company Enrich are billed per company delivered. The create c
 - Company Search: $90 per 1000 companies ($0.09 each), with a minimum of 2 when it delivers any.
 - Company Enrich: $50 per 1000 companies ($0.05 each), with a minimum of 1.
 - A task that delivers no companies costs $0. A company left out by `min_score` or `filters.require` is not billed.
+- With `max_cost_usd`, Company Search reserves the whole budget instead, and also bills its search effort where the companies delivered do not cover it, up to the budget. Such a search can cost up to the budget even when it delivers no companies.
 - `reserved_cost_usd` and `final_cost_usd` on the task show the reserved and final amounts. All task, results and export calls are free.
 
 Current prices are at <https://desearch.ai/pricing>. Results stay available for 30 days after a task ends. After that, `getCompanyResults` and `exportCompanyResults` fail with HTTP 410.

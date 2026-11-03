@@ -1291,22 +1291,11 @@ export interface TikTokSearchRequest {
   query: string;
   /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
   count?: number;
-  /** `nextCursor` from the previous page, sent back unchanged with the same query, sort and date_posted */
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and sort */
   cursor?: string | null;
   /** Sort option when supported */
   sort?: string | null;
-  /** Only videos posted in this time frame (`yesterday` is the last 24 hours) */
-  date_posted?: TikTokDatePosted | null;
 }
-
-/** Time frame of `tiktokSearch`'s `date_posted`. */
-export type TikTokDatePosted =
-  | 'yesterday'
-  | 'this-week'
-  | 'this-month'
-  | 'last-3-months'
-  | 'last-6-months'
-  | 'all-time';
 
 export interface TikTokPostByIdParams {
   /** TikTok video/post ID */

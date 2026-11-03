@@ -11,7 +11,6 @@ Adds Monitors. New methods only; no existing method changed.
 - Added `verifyWebhookSignature(secret, header, body, { toleranceSeconds, now })` and the `WEBHOOK_SIGNATURE_HEADER` and `WEBHOOK_TOLERANCE_SECONDS` constants. It checks the `Desearch-Signature` header (`t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`) against the raw body, rejects timestamps more than 5 minutes away and compares in constant time.
 - `updateMonitor(params, fields)` sends `PATCH` with only the given fields, so `webhook: null` removes the webhook. The request helper now sends a JSON body for `PATCH` as for `POST`.
 - Added the request and response types (`MonitorCreateRequest`, `MonitorUpdateRequest`, `MonitorEstimateRequest`, `Monitor`, `MonitorCreated`, `MonitorRun`, `MonitorRunWithItems`, `MonitorItem`, `MonitorEstimate`, `MonitorWebhookEvent`, `MonitorRedditOptions`, `MonitorYouTubeOptions`, `MonitorTikTokOptions`, `MonitorItemData` and others) and the value unions (`MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`, `MonitorRunStatus`, ...).
-- `tiktokSearch` takes `date_posted` (`yesterday`, `this-week`, `this-month`, `last-3-months`, `last-6-months`, `all-time`); added the `TikTokDatePosted` type.
 - Added `scripts/e2e-monitors.mjs`, a free live smoke test of these methods that takes `--base-url` and `--key-env`, and `--with-accounts` for the TikTok source and watched accounts.
 
 ## 1.12.0

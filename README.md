@@ -348,7 +348,7 @@ Existing `webCrawl()` integrations continue to use the deprecated `GET /web/craw
 ### TikTok, Facebook and Instagram
 
 ```ts
-const posts = await client.tiktokSearch({ query: 'bittensor', count: 10, date_posted: 'this-week' });
+const posts = await client.tiktokSearch({ query: 'bittensor', count: 10 });
 const profile = await client.tiktokProfile({ username: 'tiktok' });
 const comments = await client.tiktokComments({ video_id: posts[0].id!, count: 20 });
 const trending = await client.tiktokTrending({ region: 'US', count: 10 });
@@ -954,6 +954,7 @@ console.log(watched.options.x?.accounts); // ['OpenAI', 'AnthropicAI']
 - With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account.
 - An item read from a watched account has `data.account`, the name it was watched as. An account that cannot be read (unknown or private) is listed in the run's `stats.sources.<source>.accounts_failed`; the source fails only when all of its accounts do.
 - TikTok items have `data.views`, `likes`, `comments`, `shares`, `duration_s` and `thumbnail`. TikTok thumbnail URLs expire, so copy the image if you keep it.
+- TikTok search has no working date filter and ranks by relevance, so a TikTok keyword monitor finds a new video only when it reaches TikTok's top results. To follow creators, watch their accounts (`options.tiktok.accounts`).
 
 `updateMonitor(monitor, fields)` takes the same fields, all optional, plus `status`. `status: 'paused'` stops scheduled runs; `status: 'active'` resumes them, also after the API paused the monitor itself (`paused_reason` `insufficient_credits` or `webhook_failing`). `webhook: null` removes the webhook.
 

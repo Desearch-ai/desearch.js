@@ -1235,13 +1235,6 @@ describe('Social routes (TikTok, Facebook, Instagram)', () => {
       body: { query: 'bittensor', count: 3, sort: 'latest' },
     },
     {
-      name: 'tiktokSearch (date_posted)',
-      call: (c: Desearch) =>
-        c.tiktokSearch({ query: 'bittensor', date_posted: 'this-week' }),
-      path: '/desearch/tiktok/search',
-      body: { query: 'bittensor', date_posted: 'this-week' },
-    },
-    {
       name: 'facebookSearch',
       call: (c: Desearch) => c.facebookSearch({ query: 'running shoes' }),
       path: '/desearch/facebook/search',
@@ -3885,9 +3878,6 @@ describe('Monitors', () => {
     const badStatus = () =>
       // @ts-expect-error status is active or paused
       client.updateMonitor({ monitor_id: MONITOR_ID }, { status: 'deleted' });
-    const badDatePosted = () =>
-      // @ts-expect-error date_posted uses hyphens: this-week
-      client.tiktokSearch({ query: 'q', date_posted: 'this_week' });
     expect([
       badInterval,
       badSource,
@@ -3896,8 +3886,7 @@ describe('Monitors', () => {
       badTikTokCount,
       badThreads,
       badStatus,
-      badDatePosted,
-    ]).toHaveLength(8);
+    ]).toHaveLength(7);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

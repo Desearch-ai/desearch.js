@@ -57,7 +57,7 @@ Status legend:
 | `extract` | `GET /web/extract` | ✅ | Canonical Extract API method; returns non-JSON text or HTML content. |
 | `webCrawl` | `GET /web/crawl` | ⚠️ legacy | Deprecated compatibility method for existing clients. |
 | `searchApi` | `POST /search` | ✅ | Ranked pages with the best-matching passage; cost fields in the body. |
-| `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body; optional `date_posted`. |
+| `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body. |
 | `tiktokPostById` | `GET /desearch/tiktok/post/{id}` | ✅ | `id` URL-encoded into the path. |
 | `tiktokProfile` | `GET /desearch/tiktok/profile/{username}` | ✅ | Single profile. |
 | `tiktokProfilePosts` | `GET /desearch/tiktok/profile/{username}/posts` | ✅ | Paginated. |
@@ -162,7 +162,7 @@ Status legend:
 ### Social, Search API and network stats request types
 
 - ✅ `SocialPageParams` (`count`, `cursor`)
-- ✅ `TikTokSearchRequest` (with `date_posted`: `TikTokDatePosted`), `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
+- ✅ `TikTokSearchRequest`, `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
 - ✅ `FacebookSearchRequest`, `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
 - ✅ `InstagramSearchRequest` (no `cursor`), `InstagramMediaParams`, `InstagramProfileParams`, `InstagramProfilePostsParams`, `InstagramCommentsParams`, `InstagramHashtagParams`
 - ✅ `SocialCursorParams` (`cursor` only, for the YouTube and Reddit list routes)

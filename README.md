@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.11.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.14.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -25,12 +25,13 @@ What it covers today:
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 - Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
+- Monitors: searches over web, X, Reddit, YouTube and Threads that run on a schedule and keep only what is new, with a webhook signature check
 - public network stats, including a live Server-Sent Events stream
 
 What it does not try to be:
 - a browser-first SDK
 - a configurable transport layer
-- a general write or mutation client (People Search and company tasks are the only things it creates or changes)
+- a general write or mutation client (People Search tasks, company tasks and monitors are the only things it creates or changes)
 - a framework with retries or runtime validation (People Search and Company Search add small polling helpers and result iterators)
 
 ## Quick Start
@@ -210,6 +211,25 @@ See [People Search](#people-search) for the full flow.
 - `iterCompanyResults(params)` is an async iterator over the companies of `getCompanyResults` pages
 
 See [Company Search and Company Enrich](#company-search-and-company-enrich) for the full flow.
+
+### Monitors methods
+
+- `createMonitor(payload)` → `POST /desearch/monitors`
+- `estimateMonitor(payload?)` → `POST /desearch/monitors/estimate`
+- `listMonitors(params?)` → `GET /desearch/monitors`
+- `getMonitor(params)` → `GET /desearch/monitors/{monitor_id}`
+- `updateMonitor(params, fields)` → `PATCH /desearch/monitors/{monitor_id}`
+- `deleteMonitor(params)` → `DELETE /desearch/monitors/{monitor_id}`
+- `triggerMonitor(params)` → `POST /desearch/monitors/{monitor_id}/trigger` (queues a billed run)
+- `listMonitorRuns(params)` → `GET /desearch/monitors/{monitor_id}/runs`
+- `getMonitorRun(params)` → `GET /desearch/monitors/{monitor_id}/runs/{run_id}`
+- `listMonitorItems(params)` → `GET /desearch/monitors/{monitor_id}/items`
+- `testMonitorWebhook(params)` → `POST /desearch/monitors/{monitor_id}/webhook/test`
+- `rotateMonitorWebhookSecret(params)` → `POST /desearch/monitors/{monitor_id}/webhook/rotate-secret`
+- `iterMonitorItems(params)` is an async iterator over the items of `listMonitorItems` pages
+- `verifyWebhookSignature(secret, header, body, options?)` checks a webhook delivery (no request)
+
+See [Monitors](#monitors) for the full flow.
 
 ## Usage examples
 
@@ -860,6 +880,93 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 
 `exportCompanyResults({ task_id, format })` returns text. `format` is `csv` (the default) or `jsonl`. CSV has one row per company: its domain, name, fit score, location, primary email, emails, phones and social profiles, then the CEO (or managing director), founder, CTO and CFO with their title, email, email status and LinkedIn profile, and `fully_verified`, `unverified_criteria` and `enrichment_status`. JSON Lines has one company per line with every field. Fields the later stages have not filled in yet are empty.
 
+## Monitors
+
+A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). Kept items go to your webhook and stay readable through the API.
+
+### End-to-end example
+
+```ts
+import Desearch from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
+
+// What it can cost before you create it (free).
+const estimate = await client.estimateMonitor({ sources: ['web', 'x', 'reddit'], interval: '1d' });
+console.log(estimate.max_run_cost_usd, estimate.max_monthly_cost_usd);
+
+// 1. Create it. The first run is queued at once (run_now defaults to true).
+const monitor = await client.createMonitor({
+  query: 'Bittensor subnet launches and updates',
+  name: 'Bittensor subnet news',
+  criteria: ['Announces a new subnet, release or partnership'],
+  sources: ['web', 'x', 'reddit'],
+  interval: '1d',
+  options: { x: { count: 20, lang: 'en' }, web: { count: 10 } },
+  min_score: 60,
+  webhook: { url: 'https://example.com/hooks/desearch' },
+  metadata: { team: 'growth' },
+});
+// Returned only here and by rotateMonitorWebhookSecret: store it.
+const secret = monitor.webhook_secret!;
+
+// 2. Read what it found, newest first.
+for await (const item of client.iterMonitorItems({ monitor_id: monitor.monitor_id, source: 'x' })) {
+  console.log(item.score, item.url, item.text?.slice(0, 80));
+}
+
+// 3. Runs: what each source returned, how many items were new and kept, and the cost.
+const { runs } = await client.listMonitorRuns({ monitor_id: monitor.monitor_id, limit: 5 });
+const run = await client.getMonitorRun(runs[0]); // the run with its items, most relevant first
+
+// 4. Change it, pause it, run it now, delete it.
+await client.updateMonitor(monitor, { min_score: 70, status: 'paused' });
+await client.triggerMonitor(monitor); // a paused monitor can still run by hand
+await client.deleteMonitor(monitor);
+```
+
+`createMonitor` takes `query` (3-500 characters; the only required field), `name`, `criteria` (up to 5, each at most 300 characters), `sources` (default `['web', 'x']`), `interval` (default `1d`), `options`, `min_score` (0-100, default 60), `summary` (default false), `webhook` (`{ url, events }`), `metadata` (up to 20 string keys) and `run_now` (default true):
+
+- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang` and `min_likes`. Reddit, YouTube and Threads have no options yet.
+- `summary: true` adds a short LLM digest of the items each run keeps (`run.summary`).
+- `webhook.events` is any of `monitor.items.found` (a run kept at least one item), `monitor.run.completed` and `monitor.run.failed`. The default is `['monitor.items.found', 'monitor.run.failed']`. The URL must be HTTPS on a public address; redirects are not followed.
+
+`updateMonitor(monitor, fields)` takes the same fields, all optional, plus `status`. `status: 'paused'` stops scheduled runs; `status: 'active'` resumes them, also after the API paused the monitor itself (`paused_reason` `insufficient_credits` or `webhook_failing`). `webhook: null` removes the webhook.
+
+### Webhooks
+
+Each delivery is a POST with the event in `Desearch-Event`, the delivery ID in `Desearch-Delivery` and a signature in `Desearch-Signature`: `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, keyed with the monitor's `webhook_secret`. Verify it against the raw body before you parse it:
+
+```ts
+import express from 'express';
+import { verifyWebhookSignature, WEBHOOK_SIGNATURE_HEADER, type MonitorWebhookEvent } from 'desearch-js';
+
+const app = express();
+
+app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verifyWebhookSignature(process.env.DESEARCH_WEBHOOK_SECRET!, req.get(WEBHOOK_SIGNATURE_HEADER), req.body)) {
+    return res.status(400).end();
+  }
+  const event = JSON.parse(req.body.toString('utf8')) as MonitorWebhookEvent;
+  if (event.type === 'monitor.items.found') {
+    for (const item of event.items) console.log(item.source, item.score, item.url);
+  }
+  res.status(204).end(); // answer 2xx within 10 seconds
+});
+```
+
+`verifyWebhookSignature` returns false for a missing or malformed header, a wrong signature, or a timestamp more than 5 minutes from now (`toleranceSeconds` changes that). It compares in constant time and throws a `TypeError` when given a parsed object instead of the raw body. A delivery without a 2xx within 10 seconds is retried after 1, 5, 30, 120 and 360 minutes; after 5 deliveries in a row fail every attempt, the monitor pauses with `paused_reason: 'webhook_failing'`.
+
+`testMonitorWebhook(monitor)` sends a signed `monitor.test` event with one sample item and returns what your endpoint answered (`delivered`, `status_code`, `error`, `duration_ms`). `rotateMonitorWebhookSecret(monitor)` returns a new secret once; deliveries from then on are signed with it.
+
+### Pricing
+
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+
+### Errors
+
+Monitors use the standard `HTTP <status>: <body>` errors: 402 when the balance cannot hold one run (create, trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook test or secret rotation on a monitor without a webhook.
+
 ## Tech stack
 
 - TypeScript `^5.9.3`
@@ -886,6 +993,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
 | `node scripts/e2e-youtube-reddit-threads.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the 16 YouTube, Reddit and Threads methods, with page 2 of each paginated one (billed, about $0.05; run `npm run build` first). Reads the key from `DESEARCH_API_KEY`, or the variable `--key-env` names, or `~/.config/desearch/e2e.env`. |
+| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). Same key lookup as above. |
 | `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the TikTok, Facebook, Instagram, Search API and network stats methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview
@@ -899,7 +1007,7 @@ Source layout:
 Key design decisions in the current source:
 - one shared request helper powers every public method
 - GET payloads are serialized through `URLSearchParams`
-- POST payloads are serialized as JSON
+- POST and PATCH payloads are serialized as JSON
 - response parsing switches between JSON and text based on `content-type`
 - default calls return the parsed payload directly, preserving the existing SDK response shape
 - callers can opt into `{ data, metadata }` wrappers with `{ includeMetadata: true }`
@@ -907,7 +1015,7 @@ Key design decisions in the current source:
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
 - People Search and company methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
-- path parameters (`task_id`, social IDs, usernames, tags) are URL-encoded
+- path parameters (`task_id`, `monitor_id`, `run_id`, social IDs, usernames, tags) are URL-encoded
 - the network stats methods send no `Authorization` header; `streamNetworkStats()` reads the Server-Sent Events body incrementally instead of buffering it
 
 See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.

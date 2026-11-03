@@ -6,6 +6,9 @@ import Desearch, {
   Desearch as DesearchNamed,
   PeopleTaskConflictError,
   unverifiedCriteria,
+  verifyWebhookSignature,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TOLERANCE_SECONDS,
 } from './index';
 import type {
   Company,
@@ -15,6 +18,10 @@ import type {
   CompanyTask,
   CompanyTaskStage,
   InstagramSearchResultType,
+  Monitor,
+  MonitorItem,
+  MonitorRun,
+  MonitorWebhookEvent,
   NetworkStatsResponse,
   NetworkStatsStreamEvent,
   PeopleCompletionReason,
@@ -3278,5 +3285,617 @@ describe('Company Search', () => {
       email,
     ]).toHaveLength(7);
     expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('Monitors', () => {
+  const API = 'https://api.desearch.ai';
+  const MONITOR_ID = '6f1d0c9e-0d55-4b8e-9a3c-3c4d9b8e2a10';
+  const RUN_ID = '0c6a3d7e-5b1f-4e2a-9c8d-1a2b3c4d5e6f';
+
+  function monitor(overrides: Partial<Monitor> = {}): Monitor {
+    return {
+      monitor_id: MONITOR_ID,
+      name: 'Bittensor subnet news',
+      query: 'Bittensor subnet launches and updates',
+      criteria: ['Announces a new subnet, release or partnership'],
+      sources: ['web', 'x', 'reddit', 'youtube'],
+      interval: '1d',
+      options: {
+        x: { count: 20, lang: 'en', min_likes: 0 },
+        web: { count: 10 },
+      },
+      min_score: 60,
+      summary: false,
+      status: 'active',
+      paused_reason: null,
+      webhook: {
+        url: 'https://example.com/hooks/desearch',
+        events: ['monitor.items.found', 'monitor.run.failed'],
+        consecutive_failures: 0,
+      },
+      metadata: { team: 'growth' },
+      max_run_cost_usd: 0.0098,
+      next_run_at: '2026-11-04T09:00:00Z',
+      last_run: {
+        run_id: RUN_ID,
+        status: 'completed',
+        item_count: 3,
+        cost_usd: 0.0041,
+        finished_at: '2026-11-03T09:00:41Z',
+      },
+      stats: { runs: 3, items: 12, spent_usd: 0.0213 },
+      created_at: '2026-11-03T09:00:00Z',
+      updated_at: '2026-11-03T09:00:41Z',
+      ...overrides,
+    };
+  }
+
+  function run(overrides: Partial<MonitorRun> = {}): MonitorRun {
+    return {
+      run_id: RUN_ID,
+      monitor_id: MONITOR_ID,
+      trigger: 'schedule',
+      status: 'completed',
+      fail_reason: null,
+      window_start: '2026-11-02T09:00:00Z',
+      window_end: '2026-11-03T09:00:00Z',
+      item_count: 1,
+      stats: {
+        sources: {
+          x: { fetched: 20, in_window: 18, new: 7, passed: 1, error: null },
+        },
+        screened: 7,
+        passed: 1,
+        screen: 'jev',
+      },
+      summary: null,
+      reserved_usd: 0.0098,
+      cost_usd: 0.0041,
+      created_at: '2026-11-03T09:00:00Z',
+      started_at: '2026-11-03T09:00:02Z',
+      finished_at: '2026-11-03T09:00:41Z',
+      ...overrides,
+    };
+  }
+
+  function item(id: string, overrides: Partial<MonitorItem> = {}): MonitorItem {
+    return {
+      item_id: id,
+      run_id: RUN_ID,
+      source: 'x',
+      url: `https://x.com/opentensor/status/${id}`,
+      title: null,
+      text: 'Subnet 64 is live on mainnet',
+      author: {
+        name: 'Opentensor',
+        handle: 'opentensor',
+        url: 'https://x.com/opentensor',
+      },
+      published_at: '2026-11-03T08:12:00Z',
+      score: 91,
+      signals: { relevant: 0.91, new_info: 0.84 },
+      found_at: '2026-11-03T09:00:41Z',
+      data: { likes: 120, reposts: 14, replies: 9, views: 5400 },
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  it('creates a monitor with every field and returns the webhook secret', async () => {
+    const created = { ...monitor(), webhook_secret: 'whsec_abc' };
+    mockResponse({ body: created, status: 201 });
+
+    const client = new Desearch('test-key');
+    const payload = {
+      query: 'Bittensor subnet launches and updates',
+      name: 'Bittensor subnet news',
+      criteria: ['Announces a new subnet, release or partnership'],
+      sources: ['web', 'x', 'reddit', 'youtube'] as const,
+      interval: '1d' as const,
+      options: { x: { count: 20, lang: 'en' }, web: { count: 10 as const } },
+      min_score: 60,
+      summary: true,
+      webhook: {
+        url: 'https://example.com/hooks/desearch',
+        events: ['monitor.items.found' as const],
+      },
+      metadata: { team: 'growth' },
+      run_now: false,
+    };
+    const result = await client.createMonitor({
+      ...payload,
+      sources: [...payload.sources],
+    });
+    expect(result).toEqual(created);
+    expect(result.webhook_secret).toBe('whsec_abc');
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/monitors`);
+    expect(call.method).toBe('POST');
+    expect(call.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(call.body!)).toEqual({
+      ...payload,
+      sources: ['web', 'x', 'reddit', 'youtube'],
+    });
+  });
+
+  it('surfaces 402 and 409 on create as the standard HTTP error', async () => {
+    mockResponse({
+      body: '{"detail":"Your balance can\'t cover one run of this monitor. Add credits and try again."}',
+      ok: false,
+      status: 402,
+    });
+    mockResponse({
+      body: '{"detail":"Too many monitors: you already have 25. Delete one to create another."}',
+      ok: false,
+      status: 409,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.createMonitor({ query: 'openai launches' })
+    ).rejects.toThrow(/^HTTP 402: .*balance/);
+    await expect(
+      client.createMonitor({ query: 'openai launches' })
+    ).rejects.toThrow(/^HTTP 409: .*Too many monitors/);
+  });
+
+  it('estimates a monitor, with an empty body by default', async () => {
+    const estimate = {
+      max_run_cost_usd: 0.0098,
+      runs_per_month: 30,
+      max_monthly_cost_usd: 0.294,
+      breakdown: { web: 0.005, x: 0.0038, screen: 0.001 },
+    };
+    mockResponse({ body: estimate });
+    mockResponse({ body: estimate });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.estimateMonitor({
+        sources: ['web', 'x'],
+        options: { web: { count: 20 } },
+        summary: true,
+        interval: '6h',
+      })
+    ).resolves.toEqual(estimate);
+    await client.estimateMonitor();
+
+    expect(fetchCall(0).url).toBe(`${API}/desearch/monitors/estimate`);
+    expect(fetchCall(0).method).toBe('POST');
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      sources: ['web', 'x'],
+      options: { web: { count: 20 } },
+      summary: true,
+      interval: '6h',
+    });
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({});
+  });
+
+  it('lists monitors with a comma-separated status, limit and cursor', async () => {
+    const page = { monitors: [monitor()], next_cursor: 'MjAyNi0xMS0wMw' };
+    mockResponse({ body: page });
+    mockResponse({ body: { monitors: [], next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listMonitors({
+        status: ['active', 'paused'],
+        limit: 10,
+        cursor: 'abc',
+      })
+    ).resolves.toEqual(page);
+    await client.listMonitors();
+
+    expect(fetchCall(0).method).toBe('GET');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors?status=active%2Cpaused&limit=10&cursor=abc`
+    );
+    expect(fetchCall(1).url).toBe(`${API}/desearch/monitors`);
+  });
+
+  it('gets a monitor by id, URL-encoded, and a monitor object works as is', async () => {
+    mockResponse({ body: monitor() });
+    mockResponse({ body: monitor() });
+
+    const client = new Desearch('test-key');
+    await expect(client.getMonitor(monitor())).resolves.toEqual(monitor());
+    await client.getMonitor({ monitor_id: 'a/b c' });
+
+    expect(fetchCall(0).method).toBe('GET');
+    expect(fetchCall(0).url).toBe(`${API}/desearch/monitors/${MONITOR_ID}`);
+    expect(fetchCall(1).url).toBe(`${API}/desearch/monitors/a%2Fb%20c`);
+  });
+
+  it('updates a monitor with PATCH and sends webhook: null to remove the webhook', async () => {
+    const paused = monitor({
+      status: 'paused',
+      paused_reason: 'user',
+      webhook: null,
+    });
+    mockResponse({ body: paused });
+
+    const client = new Desearch('test-key');
+    // A whole monitor object as the first argument: only monitor_id is used.
+    await expect(
+      client.updateMonitor(monitor(), {
+        name: 'Renamed',
+        status: 'paused',
+        webhook: null,
+      })
+    ).resolves.toEqual(paused);
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/monitors/${MONITOR_ID}`);
+    expect(call.method).toBe('PATCH');
+    expect(call.headers).toEqual({
+      Authorization: 'test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(call.body!)).toEqual({
+      name: 'Renamed',
+      status: 'paused',
+      webhook: null,
+    });
+  });
+
+  it('deletes a monitor and surfaces 404 for an unknown one', async () => {
+    mockResponse({ body: { monitor_id: MONITOR_ID, deleted: true } });
+    mockResponse({
+      body: '{"detail":"Monitor not found"}',
+      ok: false,
+      status: 404,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.deleteMonitor({ monitor_id: MONITOR_ID })
+    ).resolves.toEqual({
+      monitor_id: MONITOR_ID,
+      deleted: true,
+    });
+    await expect(
+      client.deleteMonitor({ monitor_id: MONITOR_ID })
+    ).rejects.toThrow('HTTP 404: {"detail":"Monitor not found"}');
+
+    expect(fetchCall(0).method).toBe('DELETE');
+    expect(fetchCall(0).url).toBe(`${API}/desearch/monitors/${MONITOR_ID}`);
+    expect(fetchCall(0).body).toBeUndefined();
+  });
+
+  it('triggers a run without a body and surfaces a run in progress (409)', async () => {
+    const queued = run({
+      trigger: 'manual',
+      status: 'queued',
+      item_count: 0,
+      cost_usd: null,
+    });
+    mockResponse({ body: queued, status: 202 });
+    mockResponse({
+      body: '{"detail":"This monitor is already running."}',
+      ok: false,
+      status: 409,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.triggerMonitor({ monitor_id: MONITOR_ID })
+    ).resolves.toEqual(queued);
+    await expect(
+      client.triggerMonitor({ monitor_id: MONITOR_ID })
+    ).rejects.toThrow(
+      'HTTP 409: {"detail":"This monitor is already running."}'
+    );
+
+    const call = fetchCall(0);
+    expect(call.url).toBe(`${API}/desearch/monitors/${MONITOR_ID}/trigger`);
+    expect(call.method).toBe('POST');
+    expect(call.headers).toEqual({ Authorization: 'test-key' });
+    expect(call.body).toBeUndefined();
+  });
+
+  it('lists runs with limit and cursor, reading only those from a monitor object', async () => {
+    const page = { runs: [run()], next_cursor: 'next-runs' };
+    mockResponse({ body: page });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listMonitorRuns({ ...monitor(), limit: 5, cursor: 'prev' })
+    ).resolves.toEqual(page);
+
+    expect(fetchCall(0).method).toBe('GET');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/runs?limit=5&cursor=prev`
+    );
+  });
+
+  it('gets one run with its items, and a run object works as is', async () => {
+    const detail = { ...run(), items: [item('1842')] };
+    mockResponse({ body: detail });
+
+    const client = new Desearch('test-key');
+    const result = await client.getMonitorRun(run());
+    expect(result).toEqual(detail);
+    expect(result.items[0].score).toBe(91);
+
+    expect(fetchCall(0).method).toBe('GET');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/runs/${RUN_ID}`
+    );
+  });
+
+  it('lists items with source, limit and cursor, and returns metadata when opted in', async () => {
+    const page = { items: [item('1842')], next_cursor: '1842' };
+    mockResponse({ body: page });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.listMonitorItems(
+        { monitor_id: MONITOR_ID, source: 'x', limit: 1, cursor: '1900' },
+        { includeMetadata: true }
+      )
+    ).resolves.toEqual({ data: page, metadata: {} });
+
+    expect(fetchCall(0).method).toBe('GET');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/items?source=x&limit=1&cursor=1900`
+    );
+  });
+
+  it('iterates over every item by following next_cursor until it is null', async () => {
+    mockResponse({
+      body: { items: [item('30'), item('29')], next_cursor: '29' },
+    });
+    mockResponse({
+      body: { items: [item('28'), item('27')], next_cursor: '27' },
+    });
+    mockResponse({ body: { items: [item('26')], next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    const ids: string[] = [];
+    for await (const found of client.iterMonitorItems({
+      monitor_id: MONITOR_ID,
+      source: 'reddit',
+      limit: 2,
+    })) {
+      ids.push(found.item_id);
+    }
+
+    expect(ids).toEqual(['30', '29', '28', '27', '26']);
+    expect(mockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      `${API}/desearch/monitors/${MONITOR_ID}/items?source=reddit&limit=2`,
+      `${API}/desearch/monitors/${MONITOR_ID}/items?source=reddit&limit=2&cursor=29`,
+      `${API}/desearch/monitors/${MONITOR_ID}/items?source=reddit&limit=2&cursor=27`,
+    ]);
+  });
+
+  it('stops iterating on an empty page even when a cursor comes back', async () => {
+    mockResponse({ body: { items: [], next_cursor: '5' } });
+
+    const client = new Desearch('test-key');
+    const items: MonitorItem[] = [];
+    for await (const found of client.iterMonitorItems({
+      monitor_id: MONITOR_ID,
+    })) {
+      items.push(found);
+    }
+    expect(items).toEqual([]);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a test event and reports what the endpoint answered', async () => {
+    const answer = {
+      delivered: false,
+      status_code: 405,
+      error: 'HTTP 405',
+      duration_ms: 212,
+    };
+    mockResponse({ body: answer });
+    mockResponse({
+      body: '{"detail":"This monitor has no webhook. Add one first."}',
+      ok: false,
+      status: 400,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.testMonitorWebhook({ monitor_id: MONITOR_ID })
+    ).resolves.toEqual(answer);
+    await expect(
+      client.testMonitorWebhook({ monitor_id: MONITOR_ID })
+    ).rejects.toThrow(/^HTTP 400: .*no webhook/);
+
+    expect(fetchCall(0).method).toBe('POST');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/webhook/test`
+    );
+    expect(fetchCall(0).body).toBeUndefined();
+  });
+
+  it('rotates the webhook secret', async () => {
+    mockResponse({ body: { webhook_secret: 'whsec_new' } });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.rotateMonitorWebhookSecret({ monitor_id: MONITOR_ID })
+    ).resolves.toEqual({ webhook_secret: 'whsec_new' });
+
+    expect(fetchCall(0).method).toBe('POST');
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/webhook/rotate-secret`
+    );
+  });
+
+  it('types the requests to the values the API documents', () => {
+    const client = new Desearch('test-key');
+    // Type-only checks: compiled by `tsc --noEmit`; these calls are never awaited or sent.
+    const badInterval = () =>
+      // @ts-expect-error 2d is not an interval
+      client.createMonitor({ query: 'q', interval: '2d' });
+    const badSource = () =>
+      // @ts-expect-error tiktok is not a monitor source
+      client.createMonitor({ query: 'q', sources: ['tiktok'] });
+    const badWebCount = () =>
+      // @ts-expect-error web.count is 10, 15 or 20
+      client.estimateMonitor({ options: { web: { count: 12 } } });
+    const badStatus = () =>
+      // @ts-expect-error status is active or paused
+      client.updateMonitor({ monitor_id: MONITOR_ID }, { status: 'deleted' });
+    expect([badInterval, badSource, badWebCount, badStatus]).toHaveLength(4);
+    expect(mockedFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifyWebhookSignature', () => {
+  // Signed by the API's own signer (src/utils/webhooks.py) with this secret, time and body.
+  const SECRET = 'whsec_test_secret';
+  const T = 1793700041;
+  const BODY = '{"id":"5521","type":"monitor.items.found","items":[]}';
+  const V1 = 'f4d11312444751f4482c48e61ee3534472e3db1e5a6767e374b25846f95508e1';
+  const HEADER = `t=${T},v1=${V1}`;
+
+  it('exports the header name and the default tolerance', () => {
+    expect(WEBHOOK_SIGNATURE_HEADER).toBe('Desearch-Signature');
+    expect(WEBHOOK_TOLERANCE_SECONDS).toBe(300);
+  });
+
+  it('accepts the API signature over the raw body as a string or bytes', () => {
+    expect(verifyWebhookSignature(SECRET, HEADER, BODY, { now: T })).toBe(true);
+    expect(
+      verifyWebhookSignature(SECRET, HEADER, Buffer.from(BODY), {
+        now: T + 299,
+      })
+    ).toBe(true);
+    expect(
+      verifyWebhookSignature(SECRET, HEADER, new TextEncoder().encode(BODY), {
+        now: T - 300,
+      })
+    ).toBe(true);
+    // Spaces around parts, upper-case hex and an extra unknown scheme are fine.
+    expect(
+      verifyWebhookSignature(
+        SECRET,
+        ` t=${T}, v0=abc, v1=${V1.toUpperCase()} `,
+        BODY,
+        { now: T }
+      )
+    ).toBe(true);
+  });
+
+  it('accepts the header when any of several v1 signatures matches', () => {
+    const other = '0'.repeat(64);
+    expect(
+      verifyWebhookSignature(SECRET, `t=${T},v1=${other},v1=${V1}`, BODY, {
+        now: T,
+      })
+    ).toBe(true);
+  });
+
+  it('rejects a tampered body, a re-serialized body and the wrong secret', () => {
+    expect(
+      verifyWebhookSignature(SECRET, HEADER, BODY.replace('5521', '5522'), {
+        now: T,
+      })
+    ).toBe(false);
+    expect(
+      verifyWebhookSignature(
+        SECRET,
+        HEADER,
+        JSON.stringify(JSON.parse(BODY), null, 2),
+        { now: T }
+      )
+    ).toBe(false);
+    expect(
+      verifyWebhookSignature('whsec_other', HEADER, BODY, { now: T })
+    ).toBe(false);
+    // The secret is the key as returned, prefix included.
+    expect(
+      verifyWebhookSignature('test_secret', HEADER, BODY, { now: T })
+    ).toBe(false);
+  });
+
+  it('rejects a timestamp more than the tolerance away, in the past or the future', () => {
+    expect(verifyWebhookSignature(SECRET, HEADER, BODY, { now: T + 301 })).toBe(
+      false
+    );
+    expect(verifyWebhookSignature(SECRET, HEADER, BODY, { now: T - 301 })).toBe(
+      false
+    );
+    expect(
+      verifyWebhookSignature(SECRET, HEADER, BODY, {
+        now: T + 3600,
+        toleranceSeconds: 3600,
+      })
+    ).toBe(true);
+    // A changed timestamp breaks the signature even inside the window.
+    expect(
+      verifyWebhookSignature(SECRET, `t=${T + 1},v1=${V1}`, BODY, { now: T })
+    ).toBe(false);
+  });
+
+  it('uses the current time by default', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date((T + 10) * 1000));
+      expect(verifyWebhookSignature(SECRET, HEADER, BODY)).toBe(true);
+      vi.setSystemTime(new Date((T + 600) * 1000));
+      expect(verifyWebhookSignature(SECRET, HEADER, BODY)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects missing and malformed headers', () => {
+    const cases: (string | null | undefined)[] = [
+      undefined,
+      null,
+      '',
+      V1,
+      `v1=${V1}`,
+      `t=${T}`,
+      `t=abc,v1=${V1}`,
+      `t=${T}.5,v1=${V1}`,
+      `t=-${T},v1=${V1}`,
+      `t=${T},t=${T},v1=${V1}`,
+      `t=${T},v1=${V1.slice(0, 63)}`,
+      `t=${T},v1=${V1}00`,
+      `t=${T},v1=${'z'.repeat(64)}`,
+      `t=${T};v1=${V1}`,
+    ];
+    for (const header of cases) {
+      expect(verifyWebhookSignature(SECRET, header, BODY, { now: T })).toBe(
+        false
+      );
+    }
+    expect(verifyWebhookSignature('', HEADER, BODY, { now: T })).toBe(false);
+  });
+
+  it('throws on a parsed body instead of failing silently', () => {
+    expect(() =>
+      verifyWebhookSignature(SECRET, HEADER, JSON.parse(BODY) as never, {
+        now: T,
+      })
+    ).toThrow(TypeError);
+  });
+
+  it('types a delivery body', () => {
+    const event: MonitorWebhookEvent = {
+      id: '5521',
+      type: 'monitor.items.found',
+      created_at: '2026-11-03T09:00:41Z',
+      monitor: { monitor_id: 'm', name: 'n', metadata: {} },
+      run: null,
+      items: [],
+    };
+    // @ts-expect-error monitor.deleted is not an event
+    const bad: MonitorWebhookEvent['type'] = 'monitor.deleted';
+    expect([event, bad]).toHaveLength(2);
   });
 });

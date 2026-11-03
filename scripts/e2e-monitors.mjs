@@ -3,9 +3,13 @@
 // triggers a run, calls every free route once and deletes the monitor at the end, also after a
 // failure. The webhook test POSTs one signed sample event to https://example.com.
 //
+// --with-accounts also creates (and deletes) a second monitor with the TikTok source and watched
+// accounts on every source that has them, and checks the API returns the names cleaned. It needs
+// an API with TikTok monitors and watched accounts (desearch-public-api#635); also free.
+//
 //   npm run build
 //   DESEARCH_API_KEY=... node scripts/e2e-monitors.mjs
-//   node scripts/e2e-monitors.mjs --base-url https://api-dev.desearch.ai --key-env DESEARCH_DEV_API_KEY
+//   node scripts/e2e-monitors.mjs --base-url https://api-dev.desearch.ai --key-env DESEARCH_DEV_API_KEY [--with-accounts]
 //
 // The key is read from the environment variable named by --key-env (default DESEARCH_API_KEY), or
 // from ~/.config/desearch/e2e.env when the environment does not set it. It is never printed.
@@ -29,6 +33,7 @@ function option(name, fallback) {
 
 const baseUrl = option('--base-url', 'https://api.desearch.ai').replace(/\/+$/, '');
 const keyEnv = option('--key-env', 'DESEARCH_API_KEY');
+const withAccounts = process.argv.includes('--with-accounts');
 
 function loadEnvFile() {
   const path = join(homedir(), '.config', 'desearch', 'e2e.env');
@@ -275,6 +280,69 @@ if (created) {
         throw new Error('expected HTTP 404');
       }
     );
+  }
+}
+
+if (withAccounts) {
+  const options = {
+    x: { lang: 'en', accounts: ['@OpenAI', 'https://x.com/AnthropicAI'] },
+    reddit: { subreddits: ['r/LocalLLaMA'] },
+    youtube: { channels: ['OpenAI'] },
+    tiktok: { count: 20, accounts: ['@openai'] },
+  };
+  const sources = ['x', 'reddit', 'youtube', 'tiktok'];
+  await check(
+    'estimateMonitor (tiktok + watched accounts)',
+    async () => {
+      const estimate = await client.estimateMonitor({ sources, options, interval: '1d' });
+      expect(typeof estimate.max_run_cost_usd === 'number', 'no max_run_cost_usd');
+      expect(typeof estimate.breakdown === 'object', 'no breakdown');
+      return estimate;
+    },
+    (e) => `$${e.max_run_cost_usd}/run, breakdown ${JSON.stringify(e.breakdown)}`
+  );
+  const watched = await check(
+    'createMonitor (tiktok + watched accounts)',
+    async () =>
+      isMonitor(
+        await client.createMonitor({
+          query: 'Product launches and model releases',
+          name: `${name} (accounts)`,
+          sources,
+          options,
+          min_score: 0,
+          run_now: false,
+        })
+      ),
+    (m) => `${m.monitor_id}, max run $${m.max_run_cost_usd}`
+  );
+  if (watched) {
+    try {
+      await check(
+        'watched accounts come back cleaned',
+        async () => {
+          const { options: saved } = await client.getMonitor(watched);
+          const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+          expect(same(saved.x?.accounts, ['OpenAI', 'AnthropicAI']), `x ${JSON.stringify(saved.x)}`);
+          expect(same(saved.reddit?.subreddits, ['LocalLLaMA']), `reddit ${JSON.stringify(saved.reddit)}`);
+          expect(same(saved.youtube?.channels, ['@OpenAI']), `youtube ${JSON.stringify(saved.youtube)}`);
+          expect(same(saved.tiktok?.accounts, ['openai']), `tiktok ${JSON.stringify(saved.tiktok)}`);
+          expect(saved.tiktok?.count === 20, `tiktok.count ${saved.tiktok?.count}`);
+          return saved;
+        },
+        () => 'OpenAI, AnthropicAI, LocalLLaMA, @OpenAI, openai'
+      );
+    } finally {
+      await check(
+        'deleteMonitor (accounts)',
+        async () => {
+          const result = await client.deleteMonitor(watched);
+          expect(result.deleted === true, 'deleted is not true');
+          return result;
+        },
+        (r) => r.monitor_id
+      );
+    }
   }
 }
 

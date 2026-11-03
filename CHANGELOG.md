@@ -4,13 +4,15 @@
 
 Adds Monitors. New methods only; no existing method changed.
 
-- Added `createMonitor`, `estimateMonitor`, `listMonitors`, `getMonitor`, `updateMonitor`, `deleteMonitor` and `triggerMonitor` for `/desearch/monitors`: searches over web, X, Reddit, YouTube and Threads that run on a schedule (1h to 7d) and keep only what is new. Every route is free; each run is billed.
+- Added `createMonitor`, `estimateMonitor`, `listMonitors`, `getMonitor`, `updateMonitor`, `deleteMonitor` and `triggerMonitor` for `/desearch/monitors`: searches over web, X, Reddit, YouTube, Threads and TikTok that run on a schedule (1h to 7d) and keep only what is new. Every route is free; each run is billed.
+- Monitors can watch up to 10 accounts per source instead of searching: `options.x.accounts`, `options.reddit.subreddits`, `options.youtube.channels` and `options.tiktok.accounts` (with `tiktok.count` 10, 20 or 30). The API cleans the names and returns them that way. Items read from a watched account carry `data.account`, and a run lists unreadable accounts in `stats.sources.<source>.accounts_failed`.
 - Added `listMonitorRuns`, `getMonitorRun` (a run with the items it kept) and `listMonitorItems` (`source` filter), with `next_cursor` pagination, and `iterMonitorItems`, an async iterator over the items.
 - Added `testMonitorWebhook` and `rotateMonitorWebhookSecret`.
 - Added `verifyWebhookSignature(secret, header, body, { toleranceSeconds, now })` and the `WEBHOOK_SIGNATURE_HEADER` and `WEBHOOK_TOLERANCE_SECONDS` constants. It checks the `Desearch-Signature` header (`t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`) against the raw body, rejects timestamps more than 5 minutes away and compares in constant time.
 - `updateMonitor(params, fields)` sends `PATCH` with only the given fields, so `webhook: null` removes the webhook. The request helper now sends a JSON body for `PATCH` as for `POST`.
-- Added the request and response types (`MonitorCreateRequest`, `MonitorUpdateRequest`, `MonitorEstimateRequest`, `Monitor`, `MonitorCreated`, `MonitorRun`, `MonitorRunWithItems`, `MonitorItem`, `MonitorEstimate`, `MonitorWebhookEvent` and others) and the value unions (`MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`, `MonitorRunStatus`, ...).
-- Added `scripts/e2e-monitors.mjs`, a free live smoke test of these methods that takes `--base-url` and `--key-env`.
+- Added the request and response types (`MonitorCreateRequest`, `MonitorUpdateRequest`, `MonitorEstimateRequest`, `Monitor`, `MonitorCreated`, `MonitorRun`, `MonitorRunWithItems`, `MonitorItem`, `MonitorEstimate`, `MonitorWebhookEvent`, `MonitorRedditOptions`, `MonitorYouTubeOptions`, `MonitorTikTokOptions`, `MonitorItemData` and others) and the value unions (`MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`, `MonitorRunStatus`, ...).
+- `tiktokSearch` takes `date_posted` (`yesterday`, `this-week`, `this-month`, `last-3-months`, `last-6-months`, `all-time`); added the `TikTokDatePosted` type.
+- Added `scripts/e2e-monitors.mjs`, a free live smoke test of these methods that takes `--base-url` and `--key-env`, and `--with-accounts` for the TikTok source and watched accounts.
 
 ## 1.12.0
 

@@ -25,7 +25,7 @@ What it covers today:
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 - Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
-- Monitors: searches over web, X, Reddit, YouTube and Threads that run on a schedule and keep only what is new, with a webhook signature check
+- Monitors: searches over web, X, Reddit, YouTube, Threads and TikTok, or watched accounts, that run on a schedule and keep only what is new, with a webhook signature check
 - public network stats, including a live Server-Sent Events stream
 
 What it does not try to be:
@@ -348,7 +348,7 @@ Existing `webCrawl()` integrations continue to use the deprecated `GET /web/craw
 ### TikTok, Facebook and Instagram
 
 ```ts
-const posts = await client.tiktokSearch({ query: 'bittensor', count: 10 });
+const posts = await client.tiktokSearch({ query: 'bittensor', count: 10, date_posted: 'this-week' });
 const profile = await client.tiktokProfile({ username: 'tiktok' });
 const comments = await client.tiktokComments({ video_id: posts[0].id!, count: 20 });
 const trending = await client.tiktokTrending({ region: 'US', count: 10 });
@@ -882,7 +882,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 
 ## Monitors
 
-A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). Kept items go to your webhook and stay readable through the API.
+A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). Kept items go to your webhook and stay readable through the API.
 
 ### End-to-end example
 
@@ -927,9 +927,33 @@ await client.deleteMonitor(monitor);
 
 `createMonitor` takes `query` (3-500 characters; the only required field), `name`, `criteria` (up to 5, each at most 300 characters), `sources` (default `['web', 'x']`), `interval` (default `1d`), `options`, `min_score` (0-100, default 60), `summary` (default false), `webhook` (`{ url, events }`), `metadata` (up to 20 string keys) and `run_now` (default true):
 
-- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang` and `min_likes`. Reddit, YouTube and Threads have no options yet.
+- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10) and `accounts`; `options.reddit` takes `subreddits` and `options.youtube` takes `channels`. Threads has no options.
 - `summary: true` adds a short LLM digest of the items each run keeps (`run.summary`).
 - `webhook.events` is any of `monitor.items.found` (a run kept at least one item), `monitor.run.completed` and `monitor.run.failed`. The default is `['monitor.items.found', 'monitor.run.failed']`. The URL must be HTTPS on a public address; redirects are not followed.
+
+### Watched accounts
+
+A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels` and `options.tiktok.accounts`. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
+
+```ts
+const watched = await client.createMonitor({
+  query: 'Product launches and model releases',
+  sources: ['x', 'reddit', 'youtube', 'tiktok'],
+  options: {
+    x: { accounts: ['@OpenAI', 'https://x.com/AnthropicAI'], lang: 'en' },
+    reddit: { subreddits: ['r/LocalLLaMA'] },
+    youtube: { channels: ['@OpenAI', 'UCXZCJLdBC09xxGZ6gcdrc6A'] },
+    tiktok: { accounts: ['@openai'], count: 10 },
+  },
+  min_score: 0,
+});
+console.log(watched.options.x?.accounts); // ['OpenAI', 'AnthropicAI']
+```
+
+- Send names the way people paste them: `OpenAI`, `@OpenAI` or a profile URL for X; `LocalLLaMA`, `r/LocalLLaMA` or a URL for Reddit; `@handle`, a `UC...` channel ID or a channel URL for YouTube; `openai`, `@openai` or a profile URL for TikTok. The API cleans them and returns them that way (`OpenAI`, `LocalLLaMA`, `@OpenAI` or `UC...`, `openai`); the SDK sends them as given. An invalid name, or more than 10 on one source, is an `HTTP 422` error.
+- With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account.
+- An item read from a watched account has `data.account`, the name it was watched as. An account that cannot be read (unknown or private) is listed in the run's `stats.sources.<source>.accounts_failed`; the source fails only when all of its accounts do.
+- TikTok items have `data.views`, `likes`, `comments`, `shares`, `duration_s` and `thumbnail`. TikTok thumbnail URLs expire, so copy the image if you keep it.
 
 `updateMonitor(monitor, fields)` takes the same fields, all optional, plus `status`. `status: 'paused'` stops scheduled runs; `status: 'active'` resumes them, also after the API paused the monitor itself (`paused_reason` `insufficient_credits` or `webhook_failing`). `webhook: null` removes the webhook.
 
@@ -961,11 +985,11 @@ app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res
 
 ### Pricing
 
-Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit or a YouTube channel $0.00207 each, and TikTok $0.00207 per post (`tiktok.count` posts per account, or per search). `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
 
 ### Errors
 
-Monitors use the standard `HTTP <status>: <body>` errors: 402 when the balance cannot hold one run (create, trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook test or secret rotation on a monitor without a webhook.
+Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name or more than 10 accounts on a source), 402 when the balance cannot hold one run (create, trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook test or secret rotation on a monitor without a webhook.
 
 ## Tech stack
 
@@ -993,7 +1017,7 @@ Monitors use the standard `HTTP <status>: <body>` errors: 402 when the balance c
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
 | `node scripts/e2e-youtube-reddit-threads.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the 16 YouTube, Reddit and Threads methods, with page 2 of each paginated one (billed, about $0.05; run `npm run build` first). Reads the key from `DESEARCH_API_KEY`, or the variable `--key-env` names, or `~/.config/desearch/e2e.env`. |
-| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). Same key lookup as above. |
+| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME] [--with-accounts]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). `--with-accounts` adds a second monitor with the TikTok source and watched accounts and checks the cleaned names. Same key lookup as above. |
 | `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the TikTok, Facebook, Instagram, Search API and network stats methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview

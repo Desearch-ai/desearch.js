@@ -1291,11 +1291,22 @@ export interface TikTokSearchRequest {
   query: string;
   /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
   count?: number;
-  /** `nextCursor` from the previous page, sent back unchanged with the same query and sort */
+  /** `nextCursor` from the previous page, sent back unchanged with the same query, sort and date_posted */
   cursor?: string | null;
   /** Sort option when supported */
   sort?: string | null;
+  /** Only videos posted in this time frame (`yesterday` is the last 24 hours) */
+  date_posted?: TikTokDatePosted | null;
 }
+
+/** Time frame of `tiktokSearch`'s `date_posted`. */
+export type TikTokDatePosted =
+  | 'yesterday'
+  | 'this-week'
+  | 'this-month'
+  | 'last-3-months'
+  | 'last-6-months'
+  | 'all-time';
 
 export interface TikTokPostByIdParams {
   /** TikTok video/post ID */
@@ -2847,7 +2858,13 @@ export interface CompanyResultsPage {
 // ============================================================================
 
 /** Where a monitor looks. */
-export type MonitorSource = 'web' | 'x' | 'reddit' | 'youtube' | 'threads';
+export type MonitorSource =
+  | 'web'
+  | 'x'
+  | 'reddit'
+  | 'youtube'
+  | 'threads'
+  | 'tiktok';
 
 /** How often a monitor runs. */
 export type MonitorInterval = '1h' | '3h' | '6h' | '12h' | '1d' | '7d';
@@ -2901,23 +2918,67 @@ export interface MonitorWebOptions {
   count?: 10 | 15 | 20;
 }
 
-/** X settings of a monitor. */
+/**
+ * X settings of a monitor. With `accounts`, X reads each account's timeline (20 posts) instead of
+ * searching, `count` is not used, and `lang` and `min_likes` filter the timeline.
+ */
 export interface MonitorXOptions {
-  /** Newest posts read per run (1-100, default 20) */
+  /** Newest posts read per run (1-100, default 20). Not used with `accounts`. */
   count?: number;
   /** Only posts in this language, e.g. `en` */
   lang?: string | null;
   /** Only posts with at least this many likes */
   min_likes?: number | null;
+  /**
+   * Up to 10 X usernames to watch: `OpenAI`, `@OpenAI` or a profile URL. The API returns them
+   * cleaned (`OpenAI`) and answers 422 for an invalid name or more than 10.
+   */
+  accounts?: string[] | null;
 }
 
-/** Per-source settings. Reddit, YouTube and Threads have none yet. */
+/** Reddit settings of a monitor. */
+export interface MonitorRedditOptions {
+  /**
+   * Up to 10 subreddits to watch instead of searching: `LocalLLaMA`, `r/LocalLLaMA` or a URL. The
+   * API returns them cleaned (`LocalLLaMA`) and answers 422 for an invalid name or more than 10.
+   */
+  subreddits?: string[] | null;
+}
+
+/** YouTube settings of a monitor. */
+export interface MonitorYouTubeOptions {
+  /**
+   * Up to 10 channels to watch instead of searching: `@handle`, a `UC...` channel ID or a channel
+   * URL. The API returns a handle as `@handle` and an ID as is, and answers 422 for an invalid
+   * channel or more than 10.
+   */
+  channels?: string[] | null;
+}
+
+/** TikTok settings of a monitor. */
+export interface MonitorTikTokOptions {
+  /** Posts read per run, per account with `accounts`: 10, 20 or 30 (default 10) */
+  count?: 10 | 20 | 30;
+  /**
+   * Up to 10 TikTok usernames to watch instead of searching: `openai`, `@openai` or a profile URL.
+   * The API returns them cleaned (`openai`) and answers 422 for an invalid name or more than 10.
+   */
+  accounts?: string[] | null;
+}
+
+/**
+ * Per-source settings. A source with watched accounts (`x.accounts`, `reddit.subreddits`,
+ * `youtube.channels`, `tiktok.accounts`) reads their newest posts each run instead of searching;
+ * the query and criteria still decide what is kept, and `min_score: 0` keeps every new post.
+ * Threads has no settings.
+ */
 export interface MonitorOptions {
   web?: MonitorWebOptions | null;
   x?: MonitorXOptions | null;
-  reddit?: Record<string, never> | null;
-  youtube?: Record<string, never> | null;
+  reddit?: MonitorRedditOptions | null;
+  youtube?: MonitorYouTubeOptions | null;
   threads?: Record<string, never> | null;
+  tiktok?: MonitorTikTokOptions | null;
 }
 
 /** Where a monitor sends new items. */
@@ -3094,6 +3155,11 @@ export interface MonitorRunSourceStats {
   passed: number;
   /** Why the source failed; null when it worked */
   error?: string | null;
+  /**
+   * Watched accounts that could not be read (unknown or private). The source fails only when all of
+   * its accounts do.
+   */
+  accounts_failed?: string[];
   [key: string]: unknown;
 }
 
@@ -3176,9 +3242,18 @@ export interface MonitorItem {
   found_at: string;
   /**
    * Source fields: X `likes`, `reposts`, `replies`, `views`; Reddit `subreddit`, `score`, `comments`;
-   * YouTube `channel`, `views`, `thumbnail`; web `highlights`, `domain`.
+   * YouTube `channel`, `views`, `thumbnail`; TikTok `views`, `likes`, `comments`, `shares`,
+   * `duration_s`, `thumbnail` (TikTok thumbnail URLs expire); web `highlights`, `domain`. An item
+   * read from a watched account also has `account`, the name it was watched as.
    */
-  data: Record<string, unknown>;
+  data: MonitorItemData;
+}
+
+/** An item's source fields; see `MonitorItem.data`. */
+export interface MonitorItemData {
+  /** The watched account the item was read from, as the monitor stores it */
+  account?: string;
+  [key: string]: unknown;
 }
 
 export interface MonitorItemList {

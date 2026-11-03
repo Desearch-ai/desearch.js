@@ -57,7 +57,7 @@ Status legend:
 | `extract` | `GET /web/extract` | ✅ | Canonical Extract API method; returns non-JSON text or HTML content. |
 | `webCrawl` | `GET /web/crawl` | ⚠️ legacy | Deprecated compatibility method for existing clients. |
 | `searchApi` | `POST /search` | ✅ | Ranked pages with the best-matching passage; cost fields in the body. |
-| `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body. |
+| `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body; optional `date_posted`. |
 | `tiktokPostById` | `GET /desearch/tiktok/post/{id}` | ✅ | `id` URL-encoded into the path. |
 | `tiktokProfile` | `GET /desearch/tiktok/profile/{username}` | ✅ | Single profile. |
 | `tiktokProfilePosts` | `GET /desearch/tiktok/profile/{username}/posts` | ✅ | Paginated. |
@@ -162,7 +162,7 @@ Status legend:
 ### Social, Search API and network stats request types
 
 - ✅ `SocialPageParams` (`count`, `cursor`)
-- ✅ `TikTokSearchRequest`, `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
+- ✅ `TikTokSearchRequest` (with `date_posted`: `TikTokDatePosted`), `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
 - ✅ `FacebookSearchRequest`, `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
 - ✅ `InstagramSearchRequest` (no `cursor`), `InstagramMediaParams`, `InstagramProfileParams`, `InstagramProfilePostsParams`, `InstagramCommentsParams`, `InstagramHashtagParams`
 - ✅ `SocialCursorParams` (`cursor` only, for the YouTube and Reddit list routes)
@@ -192,7 +192,7 @@ Status legend:
 ### Monitors request types
 
 - ✅ `MonitorCreateRequest` (`query`, `name`, `criteria`, `sources`, `interval`, `options`, `min_score`, `summary`, `webhook`, `metadata`, `run_now`), `MonitorUpdateRequest` (the same fields plus `status`), `MonitorEstimateRequest`
-- ✅ `MonitorOptions`, `MonitorWebOptions`, `MonitorXOptions`, `MonitorWebhookConfig`
+- ✅ `MonitorOptions`, `MonitorWebOptions`, `MonitorXOptions` (with `accounts`), `MonitorRedditOptions` (`subreddits`), `MonitorYouTubeOptions` (`channels`), `MonitorTikTokOptions` (`count`, `accounts`), `MonitorWebhookConfig`
 - ✅ `MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`
 - ✅ `MonitorParams`, `MonitorRunParams`, `ListMonitorsParams`, `ListMonitorRunsParams`, `ListMonitorItemsParams`, `VerifyWebhookSignatureOptions`
 
@@ -221,7 +221,7 @@ Status legend:
 - ✅ `NetworkStatsResponse`, `NetworkStatsRates`, `NetworkStatsHistoryResponse`, `NetworkStatsHistoryPoint`, `NetworkStatsStreamEvent`
 - ✅ `DesearchCostMetadata.nextCursor` (from `x-desearch-next-cursor`)
 - ✅ `CompanyTask`, `CompanySearchTask` (task plus reservation cost fields), `CompanyTaskList`, `CompanyTaskConflictResponse`, `CompanyTaskWarning`, `CompanyCompletionReason`, `CompanyTaskStage`, `CompanySearchType`, `CompanyPlatform`; statuses, links and `created_by` reuse the People Search types
-- ✅ `Monitor`, `MonitorCreated` (with `webhook_secret`), `MonitorList`, `MonitorWebhook`, `MonitorLastRun`, `MonitorStats`, `MonitorRun`, `MonitorRunWithItems`, `MonitorRunList`, `MonitorRunStats`, `MonitorRunSourceStats`, `MonitorItem`, `MonitorItemAuthor`, `MonitorItemSignals`, `MonitorItemList`, `MonitorEstimate`, `MonitorDeleted`, `MonitorWebhookTestResult`, `MonitorWebhookSecret`, `MonitorWebhookEvent`, plus `MonitorPausedReason`, `MonitorRunStatus`, `MonitorRunFailReason`, `MonitorRunTrigger` and `MonitorWebhookEventType`
+- ✅ `Monitor`, `MonitorCreated` (with `webhook_secret`), `MonitorList`, `MonitorWebhook`, `MonitorLastRun`, `MonitorStats`, `MonitorRun`, `MonitorRunWithItems`, `MonitorRunList`, `MonitorRunStats`, `MonitorRunSourceStats`, `MonitorItem`, `MonitorItemAuthor`, `MonitorItemSignals`, `MonitorItemData` (`account` for watched accounts), `MonitorItemList`, `MonitorEstimate`, `MonitorDeleted`, `MonitorWebhookTestResult`, `MonitorWebhookSecret`, `MonitorWebhookEvent`, plus `MonitorPausedReason`, `MonitorRunStatus`, `MonitorRunFailReason`, `MonitorRunTrigger` and `MonitorWebhookEventType`
 - ✅ `Company`, `CompanyEmail`, `CompanyEmailVerification`, `CompanyEmailChecks`, `CompanyPhone`, `CompanySocial`, `CompanyPage`, `CompanyLocation`, `CompanyPerson`, `CompanyPersonEvidence`, `CompanyPrimaryContact`, `CompanyContactCoverage`, `CompanyEnrichment`, `CompanyEnrichmentStages`, `CompanyEnrichmentError`, `CompanyScore` (its `criteria_checks` are `PeopleCriterionCheck`), `CompanyFoundBy`, `CompanyResultsPage`, plus the value unions (`CompanyEmailType`, `CompanyEmailVerificationStatus`, `CompanyContactSource`, `CompanyStageState`, ...). Result objects accept fields a newer API adds.
 
 ### Detailed X entity models
@@ -251,7 +251,7 @@ Status legend:
 - the Search API and the public network stats, including a live Server-Sent Events stream
 - People Search across X, YouTube, LinkedIn and TikTok, with task control, polling and pagination helpers
 - Company Search and Company Enrich, with task control, a polling helper and a company iterator
-- Monitors: create, change, trigger and delete scheduled searches, read their runs and items, and verify signed webhook deliveries
+- Monitors: create, change, trigger and delete scheduled searches or watched accounts (including TikTok), read their runs and items, and verify signed webhook deliveries
 - one predictable request path across all public methods
 - Node-oriented HTTP transport through `undici`
 - CommonJS, ESM, and declaration output for package consumers

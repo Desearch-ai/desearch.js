@@ -1235,6 +1235,13 @@ describe('Social routes (TikTok, Facebook, Instagram)', () => {
       body: { query: 'bittensor', count: 3, sort: 'latest' },
     },
     {
+      name: 'tiktokSearch (date_posted)',
+      call: (c: Desearch) =>
+        c.tiktokSearch({ query: 'bittensor', date_posted: 'this-week' }),
+      path: '/desearch/tiktok/search',
+      body: { query: 'bittensor', date_posted: 'this-week' },
+    },
+    {
       name: 'facebookSearch',
       call: (c: Desearch) => c.facebookSearch({ query: 'running shoes' }),
       path: '/desearch/facebook/search',
@@ -3733,6 +3740,122 @@ describe('Monitors', () => {
     );
   });
 
+  it('sends watched accounts and the TikTok source as given, and returns them as the API cleaned them', async () => {
+    const cleaned = monitor({
+      sources: ['x', 'reddit', 'youtube', 'tiktok'],
+      options: {
+        x: { count: 20, lang: 'en', accounts: ['OpenAI', 'AnthropicAI'] },
+        reddit: { subreddits: ['LocalLLaMA'] },
+        youtube: { channels: ['@OpenAI', 'UCXZCJLdBC09xxGZ6gcdrc6A'] },
+        tiktok: { count: 20, accounts: ['openai'] },
+      },
+      min_score: 0,
+    });
+    mockResponse({ body: cleaned, status: 201 });
+    mockResponse({ body: cleaned });
+
+    const client = new Desearch('test-key');
+    const options = {
+      x: {
+        lang: 'en',
+        accounts: ['@OpenAI', 'https://x.com/AnthropicAI'],
+      },
+      reddit: { subreddits: ['r/LocalLLaMA'] },
+      youtube: {
+        channels: [
+          'OpenAI',
+          'https://www.youtube.com/channel/UCXZCJLdBC09xxGZ6gcdrc6A',
+        ],
+      },
+      tiktok: { count: 20 as const, accounts: ['@openai'] },
+    };
+    const result = await client.createMonitor({
+      query: 'Product launches',
+      sources: ['x', 'reddit', 'youtube', 'tiktok'],
+      options,
+      min_score: 0,
+    });
+    expect(result.options.x?.accounts).toEqual(['OpenAI', 'AnthropicAI']);
+    expect(result.options.tiktok?.accounts).toEqual(['openai']);
+    await client.updateMonitor(result, {
+      options: { tiktok: { accounts: ['openai'] } },
+    });
+
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      query: 'Product launches',
+      sources: ['x', 'reddit', 'youtube', 'tiktok'],
+      options,
+      min_score: 0,
+    });
+    expect(fetchCall(1).method).toBe('PATCH');
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({
+      options: { tiktok: { accounts: ['openai'] } },
+    });
+  });
+
+  it('surfaces a bad account name as the standard HTTP 422 error', async () => {
+    mockResponse({
+      body: '{"detail":[{"loc":["body","options","x","accounts"],"msg":"Value error, \'not a name!\' is not an X username","type":"value_error"}]}',
+      ok: false,
+      status: 422,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.createMonitor({
+        query: 'Product launches',
+        sources: ['x'],
+        options: { x: { accounts: ['not a name!'] } },
+      })
+    ).rejects.toThrow(/^HTTP 422: .*not an X username/);
+  });
+
+  it('reads accounts_failed from run stats and account and TikTok fields from items', async () => {
+    const tiktokItem = item('77', {
+      source: 'tiktok',
+      url: 'https://www.tiktok.com/@openai/video/7420000000000000000',
+      data: {
+        account: 'openai',
+        views: 120000,
+        likes: 9100,
+        comments: 310,
+        shares: 85,
+        duration_s: 42,
+        thumbnail: 'https://p16-sign.tiktokcdn.com/thumb.jpeg',
+      },
+    });
+    const detail = {
+      ...run({
+        stats: {
+          sources: {
+            tiktok: {
+              fetched: 10,
+              in_window: 4,
+              new: 4,
+              passed: 1,
+              error: null,
+              accounts_failed: ['private_account'],
+            },
+          },
+          screened: 4,
+          passed: 1,
+          screen: 'jev',
+        },
+      }),
+      items: [tiktokItem],
+    };
+    mockResponse({ body: detail });
+
+    const client = new Desearch('test-key');
+    const result = await client.getMonitorRun(run());
+    expect(result.stats.sources?.tiktok?.accounts_failed).toEqual([
+      'private_account',
+    ]);
+    expect(result.items[0].source).toBe('tiktok');
+    expect(result.items[0].data.account).toBe('openai');
+    expect(result.items[0].data.duration_s).toBe(42);
+  });
+
   it('types the requests to the values the API documents', () => {
     const client = new Desearch('test-key');
     // Type-only checks: compiled by `tsc --noEmit`; these calls are never awaited or sent.
@@ -3740,15 +3863,41 @@ describe('Monitors', () => {
       // @ts-expect-error 2d is not an interval
       client.createMonitor({ query: 'q', interval: '2d' });
     const badSource = () =>
-      // @ts-expect-error tiktok is not a monitor source
-      client.createMonitor({ query: 'q', sources: ['tiktok'] });
+      // @ts-expect-error linkedin is not a monitor source
+      client.createMonitor({ query: 'q', sources: ['linkedin'] });
+    const tiktok = () =>
+      client.createMonitor({
+        query: 'q',
+        sources: ['tiktok'],
+        options: { tiktok: { count: 30, accounts: ['@openai'] } },
+      });
     const badWebCount = () =>
       // @ts-expect-error web.count is 10, 15 or 20
       client.estimateMonitor({ options: { web: { count: 12 } } });
+    const badTikTokCount = () =>
+      // @ts-expect-error tiktok.count is 10, 20 or 30
+      client.estimateMonitor({ options: { tiktok: { count: 15 } } });
+    const badThreads = () =>
+      client.estimateMonitor({
+        // @ts-expect-error threads has no accounts
+        options: { threads: { accounts: ['zuck'] } },
+      });
     const badStatus = () =>
       // @ts-expect-error status is active or paused
       client.updateMonitor({ monitor_id: MONITOR_ID }, { status: 'deleted' });
-    expect([badInterval, badSource, badWebCount, badStatus]).toHaveLength(4);
+    const badDatePosted = () =>
+      // @ts-expect-error date_posted uses hyphens: this-week
+      client.tiktokSearch({ query: 'q', date_posted: 'this_week' });
+    expect([
+      badInterval,
+      badSource,
+      tiktok,
+      badWebCount,
+      badTikTokCount,
+      badThreads,
+      badStatus,
+      badDatePosted,
+    ]).toHaveLength(8);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

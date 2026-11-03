@@ -9,6 +9,10 @@ Two optional Company Search request fields. No method changed; requests without 
 - `CompanyTaskWarning.code` lists `scope_not_applied`: the query names the only companies wanted without their websites, so the search was not restricted. A query that names them with their websites ("Restrict this search to Acme (acme.com.au) and Beta (beta.co.uk). Return only those.") checks only those domains and ends `all_domains_processed`.
 - Documented `progress.effort_units` (budgeted searches only) and `progress.review` on `CompanyTask`.
 
+### Fixed
+
+- The README gave the old Company Search price. It is $45 per 1000 companies ($0.045 each) since 2026-11-02, with a minimum of 1 company when a task delivers any (was $90 per 1000 and a minimum of 2). The `companySearch` doc comment also said a minimum of 2. Company Enrich stays $50 per 1000 ($0.05 each).
+
 ## 1.12.0
 
 Covers the rest of the public API. New methods only; no existing method changed.

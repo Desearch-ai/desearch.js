@@ -2898,7 +2898,7 @@ export class Desearch {
    * from (`source_url`).
    *
    * Billed: `count` companies are reserved at the route price and the task settles to the companies it delivers
-   * (a minimum of 2 when it delivers any; a task that delivers none is free). Such a search stops once it costs more
+   * (a minimum of 1 when it delivers any; a task that delivers none is free). Such a search stops once it costs more
    * than the companies it found pay for (`completion_reason` `cost_limit`). With `max_cost_usd`, the whole budget is
    * reserved, the search goes on until it delivers `count` or spends the budget, and its search effort is billed where
    * the companies delivered do not cover it, up to the budget, even when it finds few or none.

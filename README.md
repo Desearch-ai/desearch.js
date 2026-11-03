@@ -844,8 +844,8 @@ A finished task has `completion_reason`: People Search's reasons, plus `all_doma
 
 Company Search and Company Enrich are billed per company delivered. The create call reserves `count` companies (Company Enrich: one per domain you send) at the route price, and the rest of the reservation is returned when the task ends:
 
-- Company Search: $90 per 1000 companies ($0.09 each), with a minimum of 2 when it delivers any.
-- Company Enrich: $50 per 1000 companies ($0.05 each), with a minimum of 1.
+- Company Search: $45 per 1000 companies ($0.045 each), with a minimum of 1 when it delivers any.
+- Company Enrich: $50 per 1000 companies ($0.05 each), with a minimum of 1 when it delivers any.
 - A task that delivers no companies costs $0. A company left out by `min_score` or `filters.require` is not billed.
 - With `max_cost_usd`, Company Search reserves the whole budget instead, and also bills its search effort where the companies delivered do not cover it, up to the budget. Such a search can cost up to the budget even when it delivers no companies.
 - `reserved_cost_usd` and `final_cost_usd` on the task show the reserved and final amounts. All task, results and export calls are free.

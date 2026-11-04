@@ -3977,14 +3977,14 @@ describe('Monitors', () => {
       },
     });
     const estimate = {
-      max_run_cost_usd: 0.1449,
+      max_run_cost_usd: 0.02742,
       runs_per_month: 30,
-      max_monthly_cost_usd: 4.347,
+      max_monthly_cost_usd: 0.8226,
       breakdown: {
-        instagram: 0.04968,
-        facebook: 0.0414,
+        instagram: 0.006,
+        facebook: 0.006,
         threads: 0.00414,
-        meta_ads: 0.0414,
+        meta_ads: 0.003,
         screening: 0.00828,
       },
     };

@@ -405,9 +405,10 @@ if (withMeta) {
     async () => {
       const estimate = await client.estimateMonitor({ sources, options, interval: '1d' });
       const { breakdown } = estimate;
-      // docs/monitors.md prices: an Instagram account is 12 posts and a Facebook page 10, at $0.00207
-      // per post; a Threads account is one $0.00207 request; Meta ads are $0.00207 per ad.
-      const expected = { instagram: 2 * 0.02484, facebook: 2 * 0.0207, threads: 2 * 0.00207, meta_ads: 0.0414 };
+      // docs/monitors.md prices: an Instagram account, a Facebook page and the Ad Library search
+      // (whatever meta_ads.count) are one read each at $3.00 per 1,000 reads; a Threads account is one
+      // $0.00207 request.
+      const expected = { instagram: 2 * 0.003, facebook: 2 * 0.003, threads: 2 * 0.00207, meta_ads: 0.003 };
       for (const [source, usd] of Object.entries(expected)) {
         expect(
           typeof breakdown?.[source] === 'number' && Math.abs(breakdown[source] - usd) < 1e-5,

@@ -995,7 +995,7 @@ for await (const item of client.iterMonitorItems({ monitor_id: tags.monitor_id, 
 ```
 
 - The API returns hashtags without `#` (a tag URL becomes its tag) and answers `HTTP 422` for an invalid hashtag or more than 10 on one source.
-- Each run reads `tiktok.count` posts per TikTok hashtag and up to 12 per Instagram hashtag.
+- Each run reads `tiktok.count` posts per TikTok hashtag and up to 12 per Instagram hashtag. A hashtag is billed as one read, whatever the number of posts (see Pricing).
 - An item read from a hashtag has `data.hashtag`. A hashtag that cannot be read is listed in the run's `stats.sources.<source>.hashtags_failed`; the source fails only when all of its accounts and hashtags do.
 
 ### Meta ads
@@ -1050,7 +1050,7 @@ app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res
 
 ### Pricing
 
-Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), AI screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit, a YouTube channel or a Threads account $0.00207 each, TikTok $0.00207 per post (`tiktok.count` posts per account, per hashtag, or per search), an Instagram account or hashtag $0.02484 (12 posts) and a Facebook page $0.0207 (10 posts). Meta ads are $0.00207 per ad: $0.0207 for `meta_ads.count` 10, $0.0621 for 30. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), AI screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. TikTok, Instagram, Facebook and Meta ads are billed per read, $3.00 per 1,000 reads ($0.003 a read), whatever the number of posts a read returns: one read per watched account, hashtag or Facebook page, one per TikTok keyword search, and one per Ad Library page (`meta_ads`, whatever `meta_ads.count`). A read that returns nothing is free, except an empty or private TikTok account, which takes two reads, so a run's hold counts two reads per TikTok account. The other sources pay their feed's list price: an X account is about $0.003 (a 20-post timeline), and a subreddit, a YouTube channel or a Threads account $0.00207 each. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
 
 ### Errors
 

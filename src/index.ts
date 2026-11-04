@@ -3267,8 +3267,9 @@ export class Desearch {
    * these, kept at `min_score`) and sends what it keeps to the `webhook`. With `run_now` (the default) the first run is
    * queued at once.
    *
-   * Creating a monitor is free. Each run is billed: its searches at their list price, screening per item, and the
-   * summary's LLM usage + 50% with `summary: true`. A run holds `max_run_cost_usd` on the balance while it runs.
+   * Creating a monitor is free. Each run is billed: its searches at their list price (TikTok, Instagram, Facebook and
+   * Meta ads per read: one per watched account, hashtag, page, keyword search or Ad Library page, whatever the number of
+   * posts), screening per item, and the summary's LLM usage + 50% with `summary: true`. A run holds `max_run_cost_usd` on the balance while it runs.
    *
    * @param payload - The monitor: query (required), name, criteria, sources, interval, options, min_score, summary, webhook, metadata and run_now.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.14.0
+
+Adds Monitors. New methods, plus an optional `sort` on `facebookSearch`; no existing call changes.
+
+- Added `createMonitor`, `estimateMonitor`, `listMonitors`, `getMonitor`, `updateMonitor`, `deleteMonitor` and `triggerMonitor` for `/desearch/monitors`: searches over web, X, Reddit, YouTube, Threads, TikTok and Meta ads (the Meta Ad Library, `options.meta_ads.count` 10, 20 or 30), or watched accounts on Instagram and Facebook, that run on a schedule (1h to 7d) and keep only what is new. Every route is free; each run is billed.
+- Monitors can watch up to 10 accounts per source instead of searching: `options.x.accounts`, `options.reddit.subreddits`, `options.youtube.channels`, `options.tiktok.accounts` (with `tiktok.count` 10, 20 or 30) and `options.threads.accounts`. The `instagram` and `facebook` sources read watched accounts only (`options.instagram.accounts`, `options.facebook.pages`); create and update return HTTP 422 without any. The API cleans the names and returns them that way. Items read from a watched account carry `data.account`, and a run lists unreadable accounts in `stats.sources.<source>.accounts_failed`.
+- TikTok and Instagram can also watch up to 10 hashtags each (`options.tiktok.hashtags`, `options.instagram.hashtags`; any script, `skincare`, `#სილამაზე` or a tag URL). A hashtag feed lists posts from any account, so a monitor finds posts outside the accounts it watches. Instagram needs accounts or hashtags. Items read from a hashtag carry `data.hashtag`, and a run lists unreadable hashtags in `stats.sources.<source>.hashtags_failed`.
+- TikTok, Instagram and Facebook items carry `data.post_id`, `type`, `hashtags`, `mentions` (TikTok and Instagram), `media` and `thumbnail`, TikTok `saves` and Facebook `views` (`MonitorSocialPostItemData`, `MonitorTikTokItemData`). `stats.screen` is `ai` or `keyword`.
+- Monitors billing as documented: TikTok, Instagram, Facebook and Meta ads reads are billed per read ($3.00 per 1,000 reads), whatever the number of posts a read returns: one per watched account, hashtag, Facebook page, TikTok keyword search or Ad Library page; an empty or private TikTok account takes two reads. X timelines, subreddits, YouTube channels and Threads keep their list prices.
+- Items carry `signals.criteria` (the lowest answer across the criteria) when the monitor has criteria. Added `MonitorThreadsItemData`, `MonitorInstagramItemData`, `MonitorFacebookItemData` and `MonitorMetaAdsItemData` for the `data` of those sources; a Meta ad has its headline as `title` and its Ad Library record as `url`.
+- `Monitor.webhook.last_delivery` is the newest delivery (`MonitorWebhookDelivery`: `event`, `status` `pending`, `delivered` or `failed`, `attempts`, `status_code`, `error`, `next_attempt_at`, ...), null before the first.
+- Added `listMonitorRuns`, `getMonitorRun` (a run with the items it kept) and `listMonitorItems` (`source` filter), with `next_cursor` pagination, and `iterMonitorItems`, an async iterator over the items.
+- Added `testMonitorWebhook` and `rotateMonitorWebhookSecret`.
+- Added `verifyWebhookSignature(secret, header, body, { toleranceSeconds, now })` and the `WEBHOOK_SIGNATURE_HEADER` and `WEBHOOK_TOLERANCE_SECONDS` constants. It checks the `Desearch-Signature` header (`t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`) against the raw body, rejects timestamps more than 5 minutes away and compares in constant time.
+- `updateMonitor(params, fields)` sends `PATCH` with only the given fields, so `webhook: null` removes the webhook. The request helper now sends a JSON body for `PATCH` as for `POST`.
+- Added the request and response types (`MonitorCreateRequest`, `MonitorUpdateRequest`, `MonitorEstimateRequest`, `Monitor`, `MonitorCreated`, `MonitorRun`, `MonitorRunWithItems`, `MonitorItem`, `MonitorEstimate`, `MonitorWebhookEvent`, `MonitorRedditOptions`, `MonitorYouTubeOptions`, `MonitorTikTokOptions`, `MonitorThreadsOptions`, `MonitorInstagramOptions`, `MonitorFacebookOptions`, `MonitorMetaAdsOptions`, `MonitorItemData`, `MonitorWebhookDelivery` and others) and the value unions (`MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`, `MonitorRunStatus`, `MonitorWebhookDeliveryStatus`, ...).
+- `facebookSearch` takes `sort`: `impressions` (the default: most seen first) or `recent` (recently started ads first); added the `FacebookSearchSort` type.
+- Added `scripts/e2e-monitors.mjs`, a free live smoke test of these methods that takes `--base-url` and `--key-env`, `--with-accounts` for the TikTok source and watched accounts, and `--with-meta` for the Instagram, Facebook, Meta ads and Threads sources and `webhook.last_delivery` (with one billed `facebookSearch`).
+
 ## 1.12.0
 
 Covers the rest of the public API. New methods only; no existing method changed.

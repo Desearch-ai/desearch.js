@@ -127,6 +127,26 @@ import type {
   NetworkStatsHistoryResponse,
   NetworkStatsStreamEvent,
   StreamNetworkStatsOptions,
+  ListMonitorItemsParams,
+  ListMonitorRunsParams,
+  ListMonitorsParams,
+  Monitor,
+  MonitorCreated,
+  MonitorCreateRequest,
+  MonitorDeleted,
+  MonitorEstimate,
+  MonitorEstimateRequest,
+  MonitorItem,
+  MonitorItemList,
+  MonitorList,
+  MonitorParams,
+  MonitorRun,
+  MonitorRunList,
+  MonitorRunParams,
+  MonitorRunWithItems,
+  MonitorUpdateRequest,
+  MonitorWebhookSecret,
+  MonitorWebhookTestResult,
 } from './types';
 
 const BASE_URL = 'https://api.desearch.ai';
@@ -404,7 +424,7 @@ export class Desearch {
         }
       }
 
-      if (method === 'POST' && payload) {
+      if ((method === 'POST' || method === 'PATCH') && payload) {
         headers['Content-Type'] = 'application/json';
         body = JSON.stringify(payload);
       }
@@ -457,6 +477,12 @@ export class Desearch {
   private companyTaskPath(params: CompanyTaskParams, suffix = ''): string {
     return `/desearch/companies/tasks/${encodeURIComponent(
       params.task_id
+    )}${suffix}`;
+  }
+
+  private monitorPath(params: MonitorParams, suffix = ''): string {
+    return `/desearch/monitors/${encodeURIComponent(
+      params.monitor_id
     )}${suffix}`;
   }
 
@@ -1384,9 +1410,10 @@ export class Desearch {
    * Search public Meta Ad Library records by keyword.
    *
    * Organic Facebook post search is not available.
+   * `sort` is `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping, which puts recently started ads first).
    * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
    *
-   * @param payload - The search request including query, count (1-100), and the cursor of the previous page.
+   * @param payload - The search request including query, count (1-100), sort, and the cursor of the previous page.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
    * @returns An array of Facebook posts (Ad Library records), or a metadata wrapper when opted in.
    */
@@ -3231,7 +3258,447 @@ export class Desearch {
       cursor = page.next_cursor;
     }
   }
+
+  /**
+   * Create a monitor: a search that runs on a schedule (`interval`, 1h to 7d) and keeps only what is new since its last run.
+   *
+   * Each run searches its `sources` from where the previous run ended, drops everything the monitor has already seen,
+   * screens the rest with an AI classifier (relevant, new information, and one question per criterion; `score` is the lowest of
+   * these, kept at `min_score`) and sends what it keeps to the `webhook`. With `run_now` (the default) the first run is
+   * queued at once.
+   *
+   * Creating a monitor is free. Each run is billed: its searches at their list price (TikTok, Instagram, Facebook and
+   * Meta ads per read: one per watched account, hashtag, page, keyword search or Ad Library page, whatever the number of
+   * posts), screening per item, and the summary's LLM usage + 50% with `summary: true`. A run holds `max_run_cost_usd` on the balance while it runs.
+   *
+   * @param payload - The monitor: query (required), name, criteria, sources, interval, options, min_score, summary, webhook, metadata and run_now.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The monitor (HTTP 201). With a webhook it carries `webhook_secret`, returned only here and by `rotateMonitorWebhookSecret`.
+   * @throws Error `HTTP 402` when the balance cannot hold one run, `HTTP 409` when the account already has 25 monitors,
+   * `HTTP 422` for an invalid field, including an `instagram` source without `options.instagram.accounts` or
+   * `options.instagram.hashtags`, or a `facebook` source without `options.facebook.pages`.
+   */
+  async createMonitor(
+    payload: MonitorCreateRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorCreated>>;
+  async createMonitor(
+    payload: MonitorCreateRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorCreated>;
+  async createMonitor(
+    payload: MonitorCreateRequest,
+    options: DesearchRequestOptions
+  ): Promise<MonitorCreated | DesearchResponse<MonitorCreated>>;
+  async createMonitor(
+    payload: MonitorCreateRequest,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorCreated | DesearchResponse<MonitorCreated>> {
+    return this.handleRequest<MonitorCreated>(
+      'POST',
+      '/desearch/monitors',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * The most one run of a monitor with these settings can cost, and the most it can cost in 30 days at its interval. Free.
+   *
+   * @param payload - Optional sources, options, summary and interval, with the same defaults as `createMonitor`.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns `max_run_cost_usd`, `runs_per_month`, `max_monthly_cost_usd` and a per-part `breakdown`, or a metadata wrapper when opted in.
+   */
+  async estimateMonitor(
+    payload: MonitorEstimateRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorEstimate>>;
+  async estimateMonitor(
+    payload?: MonitorEstimateRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorEstimate>;
+  async estimateMonitor(
+    payload: MonitorEstimateRequest,
+    options: DesearchRequestOptions
+  ): Promise<MonitorEstimate | DesearchResponse<MonitorEstimate>>;
+  async estimateMonitor(
+    payload: MonitorEstimateRequest = {},
+    options?: DesearchRequestOptions
+  ): Promise<MonitorEstimate | DesearchResponse<MonitorEstimate>> {
+    return this.handleRequest<MonitorEstimate>(
+      'POST',
+      '/desearch/monitors/estimate',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * List your monitors, newest first. Free.
+   *
+   * @param params - Optional status (`active` or `paused`, or both as an array, sent comma-separated), limit (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns A page of monitors with `next_cursor` for the next page, or a metadata wrapper when opted in.
+   */
+  async listMonitors(
+    params: ListMonitorsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorList>>;
+  async listMonitors(
+    params?: ListMonitorsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorList>;
+  async listMonitors(
+    params: ListMonitorsParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorList | DesearchResponse<MonitorList>>;
+  async listMonitors(
+    params: ListMonitorsParams = {},
+    options?: DesearchRequestOptions
+  ): Promise<MonitorList | DesearchResponse<MonitorList>> {
+    return this.handleRequest<MonitorList>(
+      'GET',
+      '/desearch/monitors',
+      this.taskQuery({
+        status: params.status,
+        limit: params.limit,
+        cursor: params.cursor,
+      }),
+      options
+    );
+  }
+
+  /**
+   * Get a monitor's settings, status, last run and totals. Free.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The monitor, or a metadata wrapper when opted in.
+   */
+  async getMonitor(
+    params: MonitorParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<Monitor>>;
+  async getMonitor(
+    params: MonitorParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<Monitor>;
+  async getMonitor(
+    params: MonitorParams,
+    options: DesearchRequestOptions
+  ): Promise<Monitor | DesearchResponse<Monitor>>;
+  async getMonitor(
+    params: MonitorParams,
+    options?: DesearchRequestOptions
+  ): Promise<Monitor | DesearchResponse<Monitor>> {
+    return this.handleRequest<Monitor>(
+      'GET',
+      this.monitorPath(params),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Change a monitor's settings. Send only the fields that change. `status: 'paused'` stops scheduled runs (a manual
+   * trigger still works); `status: 'active'` resumes them, also after a pause for credits or a failing webhook.
+   * `webhook: null` removes the webhook. Free.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is; only `monitor_id` is read from it.
+   * @param fields - The fields to change: query, name, criteria, sources, interval, options, min_score, summary, status, webhook and metadata.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The monitor after the change, or a metadata wrapper when opted in.
+   * @throws Error `HTTP 422` for an invalid field, or when the monitor as changed has an `instagram` source without accounts or
+   * hashtags, or a `facebook` source without pages.
+   */
+  async updateMonitor(
+    params: MonitorParams,
+    fields: MonitorUpdateRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<Monitor>>;
+  async updateMonitor(
+    params: MonitorParams,
+    fields: MonitorUpdateRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<Monitor>;
+  async updateMonitor(
+    params: MonitorParams,
+    fields: MonitorUpdateRequest,
+    options: DesearchRequestOptions
+  ): Promise<Monitor | DesearchResponse<Monitor>>;
+  async updateMonitor(
+    params: MonitorParams,
+    fields: MonitorUpdateRequest,
+    options?: DesearchRequestOptions
+  ): Promise<Monitor | DesearchResponse<Monitor>> {
+    return this.handleRequest<Monitor>(
+      'PATCH',
+      this.monitorPath(params),
+      fields,
+      options
+    );
+  }
+
+  /**
+   * Delete a monitor for good. A queued run is cancelled and its hold released. Free.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns `{ monitor_id, deleted: true }`, or a metadata wrapper when opted in.
+   */
+  async deleteMonitor(
+    params: MonitorParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorDeleted>>;
+  async deleteMonitor(
+    params: MonitorParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorDeleted>;
+  async deleteMonitor(
+    params: MonitorParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorDeleted | DesearchResponse<MonitorDeleted>>;
+  async deleteMonitor(
+    params: MonitorParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorDeleted | DesearchResponse<MonitorDeleted>> {
+    return this.handleRequest<MonitorDeleted>(
+      'DELETE',
+      this.monitorPath(params),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Queue a run now, whatever the schedule and also when the monitor is paused. It searches from where the last completed
+   * run ended and is billed like a scheduled run.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The queued run (HTTP 202); read it later with `getMonitorRun`.
+   * @throws Error `HTTP 409` when a run is already queued or running, `HTTP 402` when the balance cannot hold one run.
+   */
+  async triggerMonitor(
+    params: MonitorParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorRun>>;
+  async triggerMonitor(
+    params: MonitorParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorRun>;
+  async triggerMonitor(
+    params: MonitorParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorRun | DesearchResponse<MonitorRun>>;
+  async triggerMonitor(
+    params: MonitorParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorRun | DesearchResponse<MonitorRun>> {
+    return this.handleRequest<MonitorRun>(
+      'POST',
+      this.monitorPath(params, '/trigger'),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * List a monitor's runs, newest first, with what each source returned, how many items were new and kept, and the cost. Free.
+   *
+   * @param params - Object containing the monitor ID and optional limit (1-100) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns A page of runs with `next_cursor` for the next page, or a metadata wrapper when opted in.
+   */
+  async listMonitorRuns(
+    params: ListMonitorRunsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorRunList>>;
+  async listMonitorRuns(
+    params: ListMonitorRunsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorRunList>;
+  async listMonitorRuns(
+    params: ListMonitorRunsParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorRunList | DesearchResponse<MonitorRunList>>;
+  async listMonitorRuns(
+    params: ListMonitorRunsParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorRunList | DesearchResponse<MonitorRunList>> {
+    return this.handleRequest<MonitorRunList>(
+      'GET',
+      this.monitorPath(params, '/runs'),
+      { limit: params.limit, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Get one run with the items it kept, most relevant first. Free.
+   *
+   * @param params - Object containing the monitor ID and run ID. A run object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns The run with its `items`, or a metadata wrapper when opted in.
+   */
+  async getMonitorRun(
+    params: MonitorRunParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorRunWithItems>>;
+  async getMonitorRun(
+    params: MonitorRunParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorRunWithItems>;
+  async getMonitorRun(
+    params: MonitorRunParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorRunWithItems | DesearchResponse<MonitorRunWithItems>>;
+  async getMonitorRun(
+    params: MonitorRunParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorRunWithItems | DesearchResponse<MonitorRunWithItems>> {
+    return this.handleRequest<MonitorRunWithItems>(
+      'GET',
+      this.monitorPath(params, `/runs/${encodeURIComponent(params.run_id)}`),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * List everything a monitor kept, newest first, across all its runs. Free.
+   *
+   * @param params - Object containing the monitor ID and optional source, limit (1-200) and cursor.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns A page of items with `next_cursor` for the next page, or a metadata wrapper when opted in.
+   */
+  async listMonitorItems(
+    params: ListMonitorItemsParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorItemList>>;
+  async listMonitorItems(
+    params: ListMonitorItemsParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorItemList>;
+  async listMonitorItems(
+    params: ListMonitorItemsParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorItemList | DesearchResponse<MonitorItemList>>;
+  async listMonitorItems(
+    params: ListMonitorItemsParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorItemList | DesearchResponse<MonitorItemList>> {
+    return this.handleRequest<MonitorItemList>(
+      'GET',
+      this.monitorPath(params, '/items'),
+      { source: params.source, limit: params.limit, cursor: params.cursor },
+      options
+    );
+  }
+
+  /**
+   * Send a signed `monitor.test` event with one sample item to the monitor's webhook and report what your endpoint answered. Free.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns `{ delivered, status_code, error, duration_ms }`; `delivered` means a 2xx. Or a metadata wrapper when opted in.
+   * @throws Error `HTTP 400` when the monitor has no webhook.
+   */
+  async testMonitorWebhook(
+    params: MonitorParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorWebhookTestResult>>;
+  async testMonitorWebhook(
+    params: MonitorParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorWebhookTestResult>;
+  async testMonitorWebhook(
+    params: MonitorParams,
+    options: DesearchRequestOptions
+  ): Promise<
+    MonitorWebhookTestResult | DesearchResponse<MonitorWebhookTestResult>
+  >;
+  async testMonitorWebhook(
+    params: MonitorParams,
+    options?: DesearchRequestOptions
+  ): Promise<
+    MonitorWebhookTestResult | DesearchResponse<MonitorWebhookTestResult>
+  > {
+    return this.handleRequest<MonitorWebhookTestResult>(
+      'POST',
+      this.monitorPath(params, '/webhook/test'),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Replace the monitor's webhook signing secret. The new secret is returned once; deliveries from now on are signed with it. Free.
+   *
+   * @param params - Object containing the monitor ID. A monitor object works as is.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
+   * @returns `{ webhook_secret }`, or a metadata wrapper when opted in.
+   * @throws Error `HTTP 400` when the monitor has no webhook.
+   */
+  async rotateMonitorWebhookSecret(
+    params: MonitorParams,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<MonitorWebhookSecret>>;
+  async rotateMonitorWebhookSecret(
+    params: MonitorParams,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<MonitorWebhookSecret>;
+  async rotateMonitorWebhookSecret(
+    params: MonitorParams,
+    options: DesearchRequestOptions
+  ): Promise<MonitorWebhookSecret | DesearchResponse<MonitorWebhookSecret>>;
+  async rotateMonitorWebhookSecret(
+    params: MonitorParams,
+    options?: DesearchRequestOptions
+  ): Promise<MonitorWebhookSecret | DesearchResponse<MonitorWebhookSecret>> {
+    return this.handleRequest<MonitorWebhookSecret>(
+      'POST',
+      this.monitorPath(params, '/webhook/rotate-secret'),
+      undefined,
+      options
+    );
+  }
+
+  /**
+   * Iterate over everything a monitor kept, newest first, following `next_cursor` page by page until it is null. Free.
+   *
+   * @param params - Object containing the monitor ID and optional source, starting cursor and page size (1-200).
+   * @returns An async iterator of items.
+   */
+  async *iterMonitorItems(
+    params: ListMonitorItemsParams
+  ): AsyncGenerator<MonitorItem, void, undefined> {
+    let cursor = params.cursor ?? undefined;
+
+    for (;;) {
+      const page = await this.listMonitorItems({
+        monitor_id: params.monitor_id,
+        source: params.source,
+        limit: params.limit,
+        cursor,
+      });
+      yield* page.items;
+      if (
+        !page.next_cursor ||
+        page.items.length === 0 ||
+        page.next_cursor === cursor
+      ) {
+        return;
+      }
+      cursor = page.next_cursor;
+    }
+  }
 }
 
+export {
+  verifyWebhookSignature,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TOLERANCE_SECONDS,
+} from './webhooks';
 export type * from './types';
 export default Desearch;

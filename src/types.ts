@@ -1417,9 +1417,17 @@ export interface FacebookSearchRequest {
   query: string;
   /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
   count?: number;
-  /** `nextCursor` from the previous page, sent back unchanged with the same query */
+  /**
+   * `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping,
+   * which puts recently started ads first)
+   */
+  sort?: FacebookSearchSort | null;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and sort */
   cursor?: string | null;
 }
+
+/** Order of `facebookSearch` results. */
+export type FacebookSearchSort = 'impressions' | 'recent';
 
 export interface FacebookPostByIdParams {
   /** Facebook public post/media ID */
@@ -2840,6 +2848,652 @@ export interface CompanyResultsPage {
   next_cursor: string;
   /** True when more results are already available after this page */
   has_more: boolean;
+}
+
+// ============================================================================
+// Monitors Types
+// ============================================================================
+
+/**
+ * Where a monitor looks. `instagram` and `facebook` read watched feeds only (they have no keyword
+ * search), so they need `options.instagram.accounts` or `options.instagram.hashtags`, and
+ * `options.facebook.pages`. `meta_ads` searches the Meta Ad Library by keyword.
+ */
+export type MonitorSource =
+  | 'web'
+  | 'x'
+  | 'reddit'
+  | 'youtube'
+  | 'threads'
+  | 'tiktok'
+  | 'instagram'
+  | 'facebook'
+  | 'meta_ads';
+
+/** How often a monitor runs. */
+export type MonitorInterval = '1h' | '3h' | '6h' | '12h' | '1d' | '7d';
+
+/**
+ * A webhook event a monitor can send. `monitor.items.found`: a run kept at least one item;
+ * `monitor.run.completed`: every completed run; `monitor.run.failed`: a run failed. The default is
+ * `['monitor.items.found', 'monitor.run.failed']`.
+ */
+export type MonitorEvent =
+  | 'monitor.items.found'
+  | 'monitor.run.completed'
+  | 'monitor.run.failed';
+
+/** The `type` of a delivery: one of the monitor's events, or `monitor.test` from `testMonitorWebhook`. */
+export type MonitorWebhookEventType = MonitorEvent | 'monitor.test';
+
+/** `paused` monitors have no scheduled runs; a manual trigger still works. */
+export type MonitorStatus = 'active' | 'paused';
+
+/**
+ * Why a monitor is paused: `user` (you paused it), `insufficient_credits` (a run could not be held on
+ * the balance) or `webhook_failing` (5 deliveries in a row failed every attempt). Resume it with
+ * `updateMonitor(..., { status: 'active' })`.
+ */
+export type MonitorPausedReason =
+  | 'user'
+  | 'insufficient_credits'
+  | 'webhook_failing';
+
+export type MonitorRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/** Why a run failed. */
+export type MonitorRunFailReason =
+  | 'insufficient_credits'
+  | 'all_sources_failed'
+  | 'worker_lost'
+  | 'internal_error';
+
+/** `schedule` (the monitor's interval) or `manual` (`triggerMonitor`). */
+export type MonitorRunTrigger = 'schedule' | 'manual';
+
+/** Web settings of a monitor. */
+export interface MonitorWebOptions {
+  /** Pages read per run: 10, 15 or 20 (default 10) */
+  count?: 10 | 15 | 20;
+}
+
+/**
+ * X settings of a monitor. With `accounts`, X reads each account's timeline (20 posts) instead of
+ * searching, `count` is not used, and `lang` and `min_likes` filter the timeline.
+ */
+export interface MonitorXOptions {
+  /** Newest posts read per run (1-100, default 20). Not used with `accounts`. */
+  count?: number;
+  /** Only posts in this language, e.g. `en` */
+  lang?: string | null;
+  /** Only posts with at least this many likes */
+  min_likes?: number | null;
+  /**
+   * Up to 10 X usernames to watch: `OpenAI`, `@OpenAI` or a profile URL. The API returns them
+   * cleaned (`OpenAI`) and answers 422 for an invalid name or more than 10.
+   */
+  accounts?: string[] | null;
+}
+
+/** Reddit settings of a monitor. */
+export interface MonitorRedditOptions {
+  /**
+   * Up to 10 subreddits to watch instead of searching: `LocalLLaMA`, `r/LocalLLaMA` or a URL. The
+   * API returns them cleaned (`LocalLLaMA`) and answers 422 for an invalid name or more than 10.
+   */
+  subreddits?: string[] | null;
+}
+
+/** YouTube settings of a monitor. */
+export interface MonitorYouTubeOptions {
+  /**
+   * Up to 10 channels to watch instead of searching: `@handle`, a `UC...` channel ID or a channel
+   * URL. The API returns a handle as `@handle` and an ID as is, and answers 422 for an invalid
+   * channel or more than 10.
+   */
+  channels?: string[] | null;
+}
+
+/** TikTok settings of a monitor. */
+export interface MonitorTikTokOptions {
+  /** Posts read per run, per account and per hashtag with `accounts` or `hashtags`: 10, 20 or 30 (default 10) */
+  count?: 10 | 20 | 30;
+  /**
+   * Up to 10 TikTok usernames to watch instead of searching: `openai`, `@openai` or a profile URL.
+   * The API returns them cleaned (`openai`) and answers 422 for an invalid name or more than 10.
+   */
+  accounts?: string[] | null;
+  /**
+   * Up to 10 hashtags to watch instead of searching, in any script: `skincare`, `#სილამაზე` or a
+   * `https://www.tiktok.com/tag/skincare` URL. A hashtag feed lists posts from any account, so it finds
+   * posts outside the watched accounts. The API returns them without `#` (`skincare`) and answers 422
+   * for an invalid hashtag or more than 10.
+   */
+  hashtags?: string[] | null;
+}
+
+/** Threads settings of a monitor. */
+export interface MonitorThreadsOptions {
+  /**
+   * Up to 10 Threads usernames to watch instead of searching: `zuck`, `@zuck` or a profile URL. The
+   * API returns them cleaned (`zuck`) and answers 422 for an invalid name or more than 10. Threads
+   * keyword search returns loosely matched posts, so accounts work better.
+   */
+  accounts?: string[] | null;
+}
+
+/**
+ * Instagram settings of a monitor. The `instagram` source reads watched accounts and hashtags only,
+ * so it needs at least one of them (422 without).
+ */
+export interface MonitorInstagramOptions {
+  /**
+   * Up to 10 Instagram usernames to watch: `openai`, `@openai` or a profile URL. The API returns
+   * them cleaned (`openai`) and answers 422 for an invalid name or more than 10. Each run reads up to
+   * 12 posts per account.
+   */
+  accounts?: string[] | null;
+  /**
+   * Up to 10 hashtags to watch, in any script: `skincare`, `#სილამაზე` or a
+   * `https://www.instagram.com/explore/tags/skincare/` URL. A hashtag feed lists posts from any
+   * account, so it finds posts outside the watched accounts. The API returns them without `#`
+   * (`skincare`) and answers 422 for an invalid hashtag or more than 10. Each run reads up to 12 posts
+   * per hashtag.
+   */
+  hashtags?: string[] | null;
+}
+
+/** Facebook settings of a monitor. The `facebook` source reads watched pages only. */
+export interface MonitorFacebookOptions {
+  /**
+   * 1-10 Facebook page names or numeric IDs to watch: `NASA`, `100064869009429` or a page URL.
+   * Required with the `facebook` source (422 without). The API returns a page URL as its name, and
+   * `profile.php?id=...` and `/pages/Name/123...` as the ID, and answers 422 for an invalid page or
+   * more than 10. Each run reads up to 10 posts per page. Facebook has no organic hashtag feed; for
+   * ads by keyword, use `meta_ads`.
+   */
+  pages?: string[] | null;
+}
+
+/** Meta ads settings of a monitor. */
+export interface MonitorMetaAdsOptions {
+  /** Meta Ad Library results read per run: 10, 20 or 30 (default 10) */
+  count?: 10 | 20 | 30;
+}
+
+/**
+ * Per-source settings. A source with watched accounts (`x.accounts`, `reddit.subreddits`,
+ * `youtube.channels`, `tiktok.accounts`, `threads.accounts`, `instagram.accounts`,
+ * `facebook.pages`) or watched hashtags (`tiktok.hashtags`, `instagram.hashtags`) reads those
+ * feeds each run instead of searching; the query and criteria still decide what is kept, and
+ * `min_score: 0` keeps every new post. `instagram` needs accounts or hashtags and `facebook` pages:
+ * create and update answer 422 when either source has none.
+ */
+export interface MonitorOptions {
+  web?: MonitorWebOptions | null;
+  x?: MonitorXOptions | null;
+  reddit?: MonitorRedditOptions | null;
+  youtube?: MonitorYouTubeOptions | null;
+  threads?: MonitorThreadsOptions | null;
+  tiktok?: MonitorTikTokOptions | null;
+  instagram?: MonitorInstagramOptions | null;
+  facebook?: MonitorFacebookOptions | null;
+  meta_ads?: MonitorMetaAdsOptions | null;
+}
+
+/** Where a monitor sends new items. */
+export interface MonitorWebhookConfig {
+  /** HTTPS URL on a public address. Redirects are not followed. */
+  url: string;
+  /** Events to send (at least one). Default `['monitor.items.found', 'monitor.run.failed']`. */
+  events?: MonitorEvent[];
+}
+
+/** Create a monitor. Every field but `query` has a default. */
+export interface MonitorCreateRequest {
+  /** What to watch, in plain words (3-500 characters). Each source is searched with it. */
+  query: string;
+  /** A label for the console and webhooks (at most 120 characters) */
+  name?: string | null;
+  /** Up to 5 conditions an item must meet to be kept (each at most 300 characters) */
+  criteria?: string[] | null;
+  /** Where to look (at least one). Default `['web', 'x']`. */
+  sources?: MonitorSource[];
+  /** How often it runs. Default `1d`. */
+  interval?: MonitorInterval;
+  /** Per-source settings */
+  options?: MonitorOptions | null;
+  /** Relevance (0-100) an item needs to be kept. Default 60. */
+  min_score?: number;
+  /** Write a short digest of the items each run keeps (billed: LLM usage + 50%). Default false. */
+  summary?: boolean;
+  /** Where to send new items. The response then carries `webhook_secret`, returned only here and by `rotateMonitorWebhookSecret`. */
+  webhook?: MonitorWebhookConfig | null;
+  /** Your labels, echoed in webhooks: at most 20 keys of 1-64 characters, string values of at most 500 characters. */
+  metadata?: Record<string, string> | null;
+  /** Queue the first run at once. Default true. */
+  run_now?: boolean;
+}
+
+/** Change a monitor. Every field is optional; send only what changes. */
+export interface MonitorUpdateRequest {
+  query?: string;
+  name?: string | null;
+  criteria?: string[] | null;
+  sources?: MonitorSource[];
+  interval?: MonitorInterval;
+  options?: MonitorOptions | null;
+  min_score?: number;
+  summary?: boolean;
+  /** `paused` stops scheduled runs; `active` resumes them, also after a pause for credits or a failing webhook. */
+  status?: MonitorStatus;
+  /** A new webhook, or `null` to remove it */
+  webhook?: MonitorWebhookConfig | null;
+  metadata?: Record<string, string> | null;
+}
+
+/** What `estimateMonitor` prices: the same fields as a monitor, with the same defaults. */
+export interface MonitorEstimateRequest {
+  sources?: MonitorSource[];
+  options?: MonitorOptions | null;
+  summary?: boolean;
+  interval?: MonitorInterval;
+}
+
+/** Identifies one monitor. A monitor object works as is. */
+export interface MonitorParams {
+  /** The `monitor_id` returned when the monitor was created */
+  monitor_id: string;
+}
+
+/** Identifies one run. A run object works as is. */
+export interface MonitorRunParams extends MonitorParams {
+  /** A `run_id` from the monitor's runs */
+  run_id: string;
+}
+
+export interface ListMonitorsParams {
+  /** Only monitors in these statuses; an array is sent comma-separated */
+  status?: MonitorStatus | MonitorStatus[] | null;
+  /** Page size (1-100, default 20) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+}
+
+export interface ListMonitorRunsParams extends MonitorParams {
+  /** Page size (1-100, default 20) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+}
+
+export interface ListMonitorItemsParams extends MonitorParams {
+  /** Only items from this source */
+  source?: MonitorSource | null;
+  /** Page size (1-200, default 50) */
+  limit?: number | null;
+  /** `next_cursor` from the previous page */
+  cursor?: string | null;
+}
+
+/** A monitor's webhook. The secret is never returned here. */
+export interface MonitorWebhook {
+  url: string;
+  events: MonitorEvent[];
+  /** Deliveries in a row that failed every attempt; at 5 the monitor pauses with `webhook_failing` */
+  consecutive_failures: number;
+  /** The newest delivery to this webhook; null before the first. Test events are not deliveries. */
+  last_delivery?: MonitorWebhookDelivery | null;
+}
+
+/**
+ * Where a delivery stands: `pending` waits for its first or next attempt, `delivered` got a 2xx,
+ * `failed` used every retry (after 1, 5, 30, 120 and 360 minutes).
+ */
+export type MonitorWebhookDeliveryStatus = 'pending' | 'delivered' | 'failed';
+
+/** One delivery of a monitor event to its webhook. Timestamps are ISO 8601 strings. */
+export interface MonitorWebhookDelivery {
+  event: MonitorEvent;
+  status: MonitorWebhookDeliveryStatus;
+  /** Attempts made so far */
+  attempts: number;
+  /** The endpoint's answer to the last attempt; null when there was none */
+  status_code?: number | null;
+  /** Why the last attempt failed */
+  error?: string | null;
+  created_at?: string | null;
+  /** When the next attempt is due; set only while `pending` */
+  next_attempt_at?: string | null;
+  delivered_at?: string | null;
+}
+
+/** The monitor's latest run, in short. */
+export interface MonitorLastRun {
+  run_id: string;
+  status: MonitorRunStatus;
+  item_count: number;
+  cost_usd?: number | null;
+  fail_reason?: MonitorRunFailReason | null;
+  created_at?: string | null;
+  finished_at?: string | null;
+}
+
+/** Totals over every run of a monitor. */
+export interface MonitorStats {
+  runs: number;
+  items: number;
+  spent_usd: number;
+}
+
+/** A search that runs on a schedule and keeps only what is new. Timestamps are ISO 8601 strings. */
+export interface Monitor {
+  monitor_id: string;
+  name?: string | null;
+  query: string;
+  criteria: string[];
+  sources: MonitorSource[];
+  interval: MonitorInterval;
+  options: MonitorOptions;
+  min_score: number;
+  summary: boolean;
+  status: MonitorStatus;
+  /** Why the monitor is paused; null when active */
+  paused_reason?: MonitorPausedReason | null;
+  /** Null when the monitor has no webhook */
+  webhook?: MonitorWebhook | null;
+  metadata: Record<string, string>;
+  /** The most one run can cost; held on the balance while it runs */
+  max_run_cost_usd: number;
+  /** When the next scheduled run is due; null while paused */
+  next_run_at?: string | null;
+  last_run?: MonitorLastRun | null;
+  stats: MonitorStats;
+  created_at: string;
+  updated_at: string;
+}
+
+/** `createMonitor` returns the monitor with its webhook signing secret when it has a webhook. */
+export interface MonitorCreated extends Monitor {
+  /** `whsec_...`: verify deliveries with it (`verifyWebhookSignature`). Returned only on create and rotate. */
+  webhook_secret?: string | null;
+}
+
+export interface MonitorList {
+  /** Monitors, newest first */
+  monitors: Monitor[];
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+/** What one source returned in a run. */
+export interface MonitorRunSourceStats {
+  /** Items the search returned */
+  fetched: number;
+  /** Items dated inside the run's window */
+  in_window: number;
+  /** Items the monitor had not seen before */
+  new: number;
+  /** Items the screen kept */
+  passed: number;
+  /** Why the source failed; null when it worked */
+  error?: string | null;
+  /**
+   * Watched accounts that could not be read (unknown or private). The source fails only when all of
+   * its accounts and hashtags do.
+   */
+  accounts_failed?: string[];
+  /** Watched hashtags that could not be read (TikTok and Instagram). */
+  hashtags_failed?: string[];
+  [key: string]: unknown;
+}
+
+export interface MonitorRunStats {
+  /** Per source */
+  sources?: Partial<Record<MonitorSource, MonitorRunSourceStats>>;
+  /** New items screened */
+  screened?: number;
+  /** Items kept */
+  passed?: number;
+  /** `ai` (screened by an AI classifier), or `keyword` when the run fell back to a keyword screen */
+  screen?: 'ai' | 'keyword' | (string & {});
+  [key: string]: unknown;
+}
+
+/** One run of a monitor. `cost_usd` is null until the run is billed. */
+export interface MonitorRun {
+  run_id: string;
+  monitor_id: string;
+  trigger: MonitorRunTrigger;
+  status: MonitorRunStatus;
+  fail_reason?: MonitorRunFailReason | null;
+  /** The run searched from `window_start` to `window_end` */
+  window_start?: string | null;
+  window_end?: string | null;
+  /** Items the run kept */
+  item_count: number;
+  stats: MonitorRunStats;
+  /** The digest, with `summary: true` */
+  summary?: string | null;
+  /** What the run held on the balance */
+  reserved_usd?: number | null;
+  /** What the run was billed; null until then */
+  cost_usd?: number | null;
+  created_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+/** A run with the items it kept, most relevant first. */
+export interface MonitorRunWithItems extends MonitorRun {
+  items: MonitorItem[];
+}
+
+export interface MonitorRunList {
+  /** Runs, newest first */
+  runs: MonitorRun[];
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+/** Who posted an item. */
+export interface MonitorItemAuthor {
+  name?: string | null;
+  handle?: string | null;
+  url?: string | null;
+  [key: string]: unknown;
+}
+
+/** The AI screen's answers for an item, 0-1. */
+export interface MonitorItemSignals {
+  /** The item is about what the monitor watches */
+  relevant?: number | null;
+  /** The item reports something new; not asked for Meta ads */
+  new_info?: number | null;
+  /** The lowest answer across the monitor's criteria; only when it has criteria */
+  criteria?: number | null;
+  [key: string]: unknown;
+}
+
+/** Something new a monitor kept. */
+export interface MonitorItem {
+  item_id: string;
+  run_id: string;
+  source: MonitorSource;
+  url?: string | null;
+  title?: string | null;
+  text?: string | null;
+  author?: MonitorItemAuthor | null;
+  published_at?: string | null;
+  /** The lowest of `relevant` and the criteria, x 100 */
+  score?: number | null;
+  signals: MonitorItemSignals;
+  found_at: string;
+  /**
+   * Source fields: X `likes`, `reposts`, `replies`, `views`; Reddit `subreddit`, `score`, `comments`;
+   * YouTube `channel`, `views`, `thumbnail`; TikTok `views`, `likes`, `comments`, `shares`, `saves`,
+   * `duration_s`; Threads `likes`; Instagram `likes`, `comments`, `views`, `media_type`; Facebook
+   * `reactions`, `comments`, `shares`, `views`; Meta ads `page`, `active`, `cta`, `link`,
+   * `platforms`, `thumbnail`; web `highlights`, `domain`. TikTok, Instagram and Facebook items also
+   * have `post_id`, `type`, `hashtags`, `mentions` (TikTok and Instagram), `media` and `thumbnail`
+   * (see `MonitorSocialPostItemData`). An item read from a watched account also has `account`, the
+   * name it was watched as, and one read from a watched hashtag has `hashtag`.
+   * `MonitorTikTokItemData`, `MonitorThreadsItemData`, `MonitorInstagramItemData`,
+   * `MonitorFacebookItemData` and `MonitorMetaAdsItemData` type the fields of those sources.
+   */
+  data: MonitorItemData;
+}
+
+/** An item's source fields; see `MonitorItem.data`. */
+export interface MonitorItemData {
+  /** The watched account the item was read from, as the monitor stores it */
+  account?: string;
+  /** The watched hashtag the item was read from, without `#` (TikTok and Instagram) */
+  hashtag?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Post fields of a TikTok, Instagram or Facebook item. The metrics are the post's when the run found
+ * it; `GET /desearch/social/post?url=<link>` reads them again (`author=true` adds the author's
+ * followers).
+ */
+export interface MonitorSocialPostItemData extends MonitorItemData {
+  /** The ID `GET /desearch/social/post` gives the same post (an Instagram shortcode) */
+  post_id?: string | null;
+  /** `video`, `image`, `carousel`, `reel`, ..., as `GET /desearch/social/post` names it */
+  type?: string | null;
+  /** Hashtags of the post, without `#` */
+  hashtags?: string[];
+  /** Links to the post's videos and pictures. They expire after a few days, so copy what you keep. */
+  media?: string[];
+  /** The cover image. The link expires too. */
+  thumbnail?: string | null;
+}
+
+/** `data` of a TikTok item (`source: 'tiktok'`). */
+export interface MonitorTikTokItemData extends MonitorSocialPostItemData {
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  /** Times the video was saved */
+  saves?: number | null;
+  duration_s?: number | null;
+  /** Accounts the post mentions, without `@` */
+  mentions?: string[];
+}
+
+/** `data` of a Threads item (`source: 'threads'`). */
+export interface MonitorThreadsItemData extends MonitorItemData {
+  likes?: number | null;
+}
+
+/** `data` of an Instagram item (`source: 'instagram'`), read from a watched account or hashtag. */
+export interface MonitorInstagramItemData extends MonitorSocialPostItemData {
+  likes?: number | null;
+  comments?: number | null;
+  /** Plays of a video or reel */
+  views?: number | null;
+  /** The post's media type as Instagram reports it */
+  media_type?: string | null;
+  /** Accounts the post mentions, without `@` */
+  mentions?: string[];
+}
+
+/** `data` of a Facebook item (`source: 'facebook'`), a post of a watched page. */
+export interface MonitorFacebookItemData extends MonitorSocialPostItemData {
+  reactions?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  /** Plays of a video or reel */
+  views?: number | null;
+}
+
+/**
+ * `data` of a Meta ad (`source: 'meta_ads'`). The item's `title` is the ad headline, `url` its Meta
+ * Ad Library record and `published_at` when the ad started.
+ */
+export interface MonitorMetaAdsItemData extends MonitorItemData {
+  /** The Facebook page that runs the ad */
+  page?: string | null;
+  /** Whether the ad is still running */
+  active?: boolean | null;
+  /** The call-to-action button text */
+  cta?: string | null;
+  /** The ad's landing page */
+  link?: string | null;
+  /** Where the ad runs, as Meta names the platforms */
+  platforms?: string[];
+  /** The first image or video cover of the ad */
+  thumbnail?: string | null;
+}
+
+export interface MonitorItemList {
+  /** Items, newest first */
+  items: MonitorItem[];
+  /** Pass as `cursor` for the next page; null on the last page */
+  next_cursor?: string | null;
+}
+
+/** The most a monitor with these settings can cost. */
+export interface MonitorEstimate {
+  /** The most one run can cost */
+  max_run_cost_usd: number;
+  /** Runs in 30 days at this interval */
+  runs_per_month: number;
+  /** `max_run_cost_usd` x `runs_per_month` */
+  max_monthly_cost_usd: number;
+  /** The most each part of a run can cost, in USD: one key per source, `screening`, and `summary` with `summary: true` */
+  breakdown: Record<string, number>;
+}
+
+export interface MonitorDeleted {
+  monitor_id: string;
+  deleted: true;
+}
+
+/** What your endpoint answered a test delivery. `delivered` means a 2xx. */
+export interface MonitorWebhookTestResult {
+  delivered: boolean;
+  status_code?: number | null;
+  error?: string | null;
+  duration_ms: number;
+}
+
+export interface MonitorWebhookSecret {
+  /** The new `whsec_...` secret. Deliveries from now on are signed with it. */
+  webhook_secret: string;
+}
+
+/** The JSON body of a webhook delivery. Verify it with `verifyWebhookSignature` before you parse it. */
+export interface MonitorWebhookEvent {
+  /** The delivery ID, also sent as the `Desearch-Delivery` header */
+  id: string;
+  type: MonitorWebhookEventType;
+  created_at: string;
+  monitor: {
+    monitor_id: string;
+    name?: string | null;
+    metadata: Record<string, string>;
+  };
+  /** The run; null for `monitor.test` */
+  run: MonitorRun | null;
+  items: MonitorItem[];
+}
+
+/** Options for `verifyWebhookSignature`. */
+export interface VerifyWebhookSignatureOptions {
+  /** Reject a signature whose timestamp is further than this from now. Default 300 (5 minutes). */
+  toleranceSeconds?: number;
+  /** The current Unix time in seconds. Default `Date.now() / 1000`. */
+  now?: number;
 }
 
 // ============================================================================

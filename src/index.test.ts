@@ -3867,8 +3867,8 @@ describe('Monitors', () => {
     const cleaned = monitor({
       sources: ['tiktok', 'instagram'],
       options: {
-        tiktok: { count: 10, accounts: ['openai'], hashtags: ['ავერსი', 'aversi'] },
-        instagram: { hashtags: ['aversi', 'ავერსი'] },
+        tiktok: { count: 10, accounts: ['openai'], hashtags: ['სილამაზე', 'skincare'] },
+        instagram: { hashtags: ['skincare', 'სილამაზე'] },
       },
       min_score: 0,
     });
@@ -3878,23 +3878,23 @@ describe('Monitors', () => {
     const options = {
       tiktok: {
         accounts: ['@openai'],
-        hashtags: ['#ავერსი', 'https://www.tiktok.com/tag/aversi'],
+        hashtags: ['#სილამაზე', 'https://www.tiktok.com/tag/skincare'],
       },
       // Instagram may watch hashtags without accounts.
       instagram: {
-        hashtags: ['https://www.instagram.com/explore/tags/aversi/', 'ავერსი'],
+        hashtags: ['https://www.instagram.com/explore/tags/skincare/', 'სილამაზე'],
       },
     };
     const result = await client.createMonitor({
-      query: 'Aversi pharmacies',
+      query: 'Posts about our skincare brand',
       sources: ['tiktok', 'instagram'],
       options,
       min_score: 0,
     });
-    expect(result.options.tiktok?.hashtags).toEqual(['ავერსი', 'aversi']);
-    expect(result.options.instagram?.hashtags).toEqual(['aversi', 'ავერსი']);
+    expect(result.options.tiktok?.hashtags).toEqual(['სილამაზე', 'skincare']);
+    expect(result.options.instagram?.hashtags).toEqual(['skincare', 'სილამაზე']);
     expect(JSON.parse(fetchCall(0).body!)).toEqual({
-      query: 'Aversi pharmacies',
+      query: 'Posts about our skincare brand',
       sources: ['tiktok', 'instagram'],
       options,
       min_score: 0,
@@ -3906,7 +3906,7 @@ describe('Monitors', () => {
       source: 'tiktok',
       url: 'https://www.tiktok.com/@someone/video/7570000000000000001',
       data: {
-        hashtag: 'aversi',
+        hashtag: 'skincare',
         post_id: '7570000000000000001',
         type: 'video',
         views: 3400,
@@ -3915,8 +3915,8 @@ describe('Monitors', () => {
         shares: 3,
         saves: 14,
         duration_s: 21,
-        hashtags: ['aversi', 'pharmacy'],
-        mentions: ['aversipharma'],
+        hashtags: ['skincare', 'serum'],
+        mentions: ['skincarebrand'],
         media: ['https://v16.tiktokcdn.com/video.mp4'],
         thumbnail: 'https://p16-sign.tiktokcdn.com/thumb.jpeg',
       },
@@ -3952,10 +3952,10 @@ describe('Monitors', () => {
     expect(result.stats.screen).toBe('ai');
     expect(result.stats.sources?.instagram?.hashtags_failed).toEqual(['gone_tag']);
     const tiktok = result.items[0].data as MonitorTikTokItemData;
-    expect(tiktok.hashtag).toBe('aversi');
+    expect(tiktok.hashtag).toBe('skincare');
     expect(tiktok.post_id).toBe('7570000000000000001');
     expect(tiktok.saves).toBe(14);
-    expect(tiktok.mentions).toEqual(['aversipharma']);
+    expect(tiktok.mentions).toEqual(['skincarebrand']);
     expect((result.items[1].data as MonitorFacebookItemData).views).toBe(52000);
   });
 

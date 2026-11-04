@@ -972,21 +972,21 @@ console.log(social.options.facebook?.pages); // ['NASA', '100064869009429']
 
 ### Watched hashtags
 
-TikTok and Instagram can also watch up to 10 hashtags each: `options.tiktok.hashtags` and `options.instagram.hashtags`, in any script (`aversi`, `#ავერსი`, or a tag URL such as `https://www.tiktok.com/tag/aversi` or `https://www.instagram.com/explore/tags/aversi/`). A hashtag feed lists popular as well as recent posts from any account, so a monitor finds posts outside the accounts it watches; the window drops the old ones and the monitor's seen items the rest. With accounts or hashtags, a source reads those feeds instead of searching by keyword, and Instagram needs one of them. Facebook has no organic hashtag feed; for ads by keyword, use `meta_ads`.
+TikTok and Instagram can also watch up to 10 hashtags each: `options.tiktok.hashtags` and `options.instagram.hashtags`, in any script (`skincare`, `#სილამაზე`, or a tag URL such as `https://www.tiktok.com/tag/skincare` or `https://www.instagram.com/explore/tags/skincare/`). A hashtag feed lists popular as well as recent posts from any account, so a monitor finds posts outside the accounts it watches; the window drops the old ones and the monitor's seen items the rest. With accounts or hashtags, a source reads those feeds instead of searching by keyword, and Instagram needs one of them. Facebook has no organic hashtag feed; for ads by keyword, use `meta_ads`.
 
 ```ts
 import type { MonitorTikTokItemData } from 'desearch-js';
 
 const tags = await client.createMonitor({
-  query: 'Aversi pharmacies: promotions, reviews and complaints',
+  query: 'Posts about our skincare brand',
   sources: ['tiktok', 'instagram'],
   options: {
-    tiktok: { count: 10, hashtags: ['#ავერსი', 'https://www.tiktok.com/tag/aversi'] },
-    instagram: { hashtags: ['aversi', 'ავერსი'] }, // no accounts needed
+    tiktok: { count: 10, hashtags: ['#სილამაზე', 'https://www.tiktok.com/tag/skincare'] },
+    instagram: { hashtags: ['skincare', 'სილამაზე'] }, // no accounts needed
   },
   min_score: 0,
 });
-console.log(tags.options.tiktok?.hashtags); // ['ავერსი', 'aversi']
+console.log(tags.options.tiktok?.hashtags); // ['სილამაზე', 'skincare']
 
 for await (const item of client.iterMonitorItems({ monitor_id: tags.monitor_id, source: 'tiktok' })) {
   const data = item.data as MonitorTikTokItemData;

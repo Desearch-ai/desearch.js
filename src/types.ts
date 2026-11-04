@@ -2969,9 +2969,9 @@ export interface MonitorTikTokOptions {
    */
   accounts?: string[] | null;
   /**
-   * Up to 10 hashtags to watch instead of searching, in any script: `aversi`, `#ავერსი` or a
-   * `https://www.tiktok.com/tag/aversi` URL. A hashtag feed lists posts from any account, so it finds
-   * posts outside the watched accounts. The API returns them without `#` (`aversi`) and answers 422
+   * Up to 10 hashtags to watch instead of searching, in any script: `skincare`, `#სილამაზე` or a
+   * `https://www.tiktok.com/tag/skincare` URL. A hashtag feed lists posts from any account, so it finds
+   * posts outside the watched accounts. The API returns them without `#` (`skincare`) and answers 422
    * for an invalid hashtag or more than 10.
    */
   hashtags?: string[] | null;
@@ -2999,10 +2999,10 @@ export interface MonitorInstagramOptions {
    */
   accounts?: string[] | null;
   /**
-   * Up to 10 hashtags to watch, in any script: `aversi`, `#ავერსი` or a
-   * `https://www.instagram.com/explore/tags/aversi/` URL. A hashtag feed lists posts from any
+   * Up to 10 hashtags to watch, in any script: `skincare`, `#სილამაზე` or a
+   * `https://www.instagram.com/explore/tags/skincare/` URL. A hashtag feed lists posts from any
    * account, so it finds posts outside the watched accounts. The API returns them without `#`
-   * (`aversi`) and answers 422 for an invalid hashtag or more than 10. Each run reads up to 12 posts
+   * (`skincare`) and answers 422 for an invalid hashtag or more than 10. Each run reads up to 12 posts
    * per hashtag.
    */
   hashtags?: string[] | null;

@@ -883,7 +883,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 
 ## Monitors
 
-A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`, `instagram`, `facebook`, `meta_ads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). `item.signals` holds the answers (0-1): `relevant`, `new_info` and, when the monitor has criteria, `criteria`, the lowest answer across them. Kept items go to your webhook and stay readable through the API.
+A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`, `instagram`, `facebook`, `meta_ads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with an AI classifier: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). `item.signals` holds the answers (0-1): `relevant`, `new_info` and, when the monitor has criteria, `criteria`, the lowest answer across them. Kept items go to your webhook and stay readable through the API.
 
 ### End-to-end example
 
@@ -928,13 +928,13 @@ await client.deleteMonitor(monitor);
 
 `createMonitor` takes `query` (3-500 characters; the only required field), `name`, `criteria` (up to 5, each at most 300 characters), `sources` (default `['web', 'x']`), `interval` (default `1d`), `options`, `min_score` (0-100, default 60), `summary` (default false), `webhook` (`{ url, events }`), `metadata` (up to 20 string keys) and `run_now` (default true):
 
-- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10) and `accounts`; `options.reddit` takes `subreddits`, `options.youtube` takes `channels` and `options.threads` takes `accounts`; `options.instagram.accounts` and `options.facebook.pages` are required with those sources; `options.meta_ads.count` is 10, 20 or 30 (default 10).
+- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10), `accounts` and `hashtags`; `options.reddit` takes `subreddits`, `options.youtube` takes `channels` and `options.threads` takes `accounts`; `options.instagram` takes `accounts` and `hashtags` (one of them is required with that source) and `options.facebook.pages` is required with `facebook`; `options.meta_ads.count` is 10, 20 or 30 (default 10).
 - `summary: true` adds a short LLM digest of the items each run keeps (`run.summary`).
 - `webhook.events` is any of `monitor.items.found` (a run kept at least one item), `monitor.run.completed` and `monitor.run.failed`. The default is `['monitor.items.found', 'monitor.run.failed']`. The URL must be HTTPS on a public address; redirects are not followed.
 
 ### Watched accounts
 
-A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels`, `options.tiktok.accounts` and `options.threads.accounts`. Instagram (`options.instagram.accounts`) and Facebook (`options.facebook.pages`) only watch accounts, as neither has a keyword search for posts: a monitor with either source needs at least one. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
+A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels`, `options.tiktok.accounts` and `options.threads.accounts`. Instagram (`options.instagram.accounts`, or hashtags) and Facebook (`options.facebook.pages`) only watch accounts, as neither has a keyword search for posts: a monitor with either source needs at least one. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
 
 ```ts
 const watched = await client.createMonitor({
@@ -966,9 +966,37 @@ console.log(social.options.facebook?.pages); // ['NASA', '100064869009429']
 - Send names the way people paste them: `OpenAI`, `@OpenAI` or a profile URL for X (at most 15 characters); `LocalLLaMA`, `r/LocalLLaMA` or a URL for Reddit; `@handle`, a `UC...` channel ID or a channel URL for YouTube; `openai`, `@openai` or a profile URL for TikTok, Instagram and Threads; a page name, a numeric page ID or a page URL for Facebook (`profile.php?id=...` and `/pages/Name/123...` URLs give the ID). The API cleans them and returns them that way (`OpenAI`, `LocalLLaMA`, `@OpenAI` or `UC...`, `openai`, `NASA` or `100064869009429`); the SDK sends them as given. An invalid name, or more than 10 on one source, is an `HTTP 422` error, and so is an `instagram` or `facebook` source without accounts, on create and on update (`updateMonitor` checks the monitor as changed).
 - With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account. Instagram reads up to 12 posts per account and Facebook up to 10 per page.
 - An item read from a watched account has `data.account`, the name it was watched as. An account that cannot be read (unknown or private) is listed in the run's `stats.sources.<source>.accounts_failed`; the source fails only when all of its accounts do.
-- TikTok items have `data.views`, `likes`, `comments`, `shares`, `duration_s` and `thumbnail`. TikTok thumbnail URLs expire, so copy the image if you keep it.
-- Threads items have `data.likes`; Instagram items `likes`, `comments`, `views`, `media_type` and `thumbnail` (these URLs expire too); Facebook items `reactions`, `comments` and `shares`. `MonitorThreadsItemData`, `MonitorInstagramItemData` and `MonitorFacebookItemData` type them.
+- TikTok items have `data.views`, `likes`, `comments`, `shares`, `saves` and `duration_s`; Threads items `likes`; Instagram items `likes`, `comments`, `views` and `media_type`; Facebook items `reactions`, `comments`, `shares` and `views`. `MonitorTikTokItemData`, `MonitorThreadsItemData`, `MonitorInstagramItemData` and `MonitorFacebookItemData` type them.
+- TikTok, Instagram and Facebook items also have `data.post_id` (the ID `GET /desearch/social/post` gives the same post; an Instagram shortcode), `type` (`video`, `image`, `carousel`, `reel`, ...), `hashtags`, `mentions` (TikTok and Instagram), `media` (links to the post's videos and pictures) and `thumbnail` (`MonitorSocialPostItemData`). Media and thumbnail links expire after a few days, so copy what you keep. The metrics are the post's when the run found it; `GET /desearch/social/post?url=<link>` reads them again, and `author=true` adds the author's followers.
 - TikTok search has no working date filter and ranks by relevance, so a TikTok keyword monitor finds a new video only when it reaches TikTok's top results. To follow creators, watch their accounts (`options.tiktok.accounts`). Threads keyword search returns loosely matched posts, so accounts work better there too.
+
+### Watched hashtags
+
+TikTok and Instagram can also watch up to 10 hashtags each: `options.tiktok.hashtags` and `options.instagram.hashtags`, in any script (`aversi`, `#ავერსი`, or a tag URL such as `https://www.tiktok.com/tag/aversi` or `https://www.instagram.com/explore/tags/aversi/`). A hashtag feed lists popular as well as recent posts from any account, so a monitor finds posts outside the accounts it watches; the window drops the old ones and the monitor's seen items the rest. With accounts or hashtags, a source reads those feeds instead of searching by keyword, and Instagram needs one of them. Facebook has no organic hashtag feed; for ads by keyword, use `meta_ads`.
+
+```ts
+import type { MonitorTikTokItemData } from 'desearch-js';
+
+const tags = await client.createMonitor({
+  query: 'Aversi pharmacies: promotions, reviews and complaints',
+  sources: ['tiktok', 'instagram'],
+  options: {
+    tiktok: { count: 10, hashtags: ['#ავერსი', 'https://www.tiktok.com/tag/aversi'] },
+    instagram: { hashtags: ['aversi', 'ავერსი'] }, // no accounts needed
+  },
+  min_score: 0,
+});
+console.log(tags.options.tiktok?.hashtags); // ['ავერსი', 'aversi']
+
+for await (const item of client.iterMonitorItems({ monitor_id: tags.monitor_id, source: 'tiktok' })) {
+  const data = item.data as MonitorTikTokItemData;
+  console.log(data.hashtag, data.post_id, data.views, item.url);
+}
+```
+
+- The API returns hashtags without `#` (a tag URL becomes its tag) and answers `HTTP 422` for an invalid hashtag or more than 10 on one source.
+- Each run reads `tiktok.count` posts per TikTok hashtag and up to 12 per Instagram hashtag.
+- An item read from a hashtag has `data.hashtag`. A hashtag that cannot be read is listed in the run's `stats.sources.<source>.hashtags_failed`; the source fails only when all of its accounts and hashtags do.
 
 ### Meta ads
 
@@ -1022,11 +1050,11 @@ app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res
 
 ### Pricing
 
-Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit, a YouTube channel or a Threads account $0.00207 each, TikTok $0.00207 per post (`tiktok.count` posts per account, or per search), an Instagram account $0.02484 (12 posts) and a Facebook page $0.0207 (10 posts). Meta ads are $0.00207 per ad: $0.0207 for `meta_ads.count` 10, $0.0621 for 30. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), AI screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit, a YouTube channel or a Threads account $0.00207 each, TikTok $0.00207 per post (`tiktok.count` posts per account, per hashtag, or per search), an Instagram account or hashtag $0.02484 (12 posts) and a Facebook page $0.0207 (10 posts). Meta ads are $0.00207 per ad: $0.0207 for `meta_ads.count` 10, $0.0621 for 30. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
 
 ### Errors
 
-Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name, more than 10 accounts on a source, or an `instagram` or `facebook` source without accounts), 402 when the balance cannot hold one run (create, even with `run_now: false`, and trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook URL that is not public HTTPS, an invalid cursor or `source` filter, or a webhook test or secret rotation on a monitor without a webhook.
+Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name or hashtag, more than 10 accounts or hashtags on a source, an `instagram` source without accounts or hashtags, or a `facebook` source without pages), 402 when the balance cannot hold one run (create, even with `run_now: false`, and trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook URL that is not public HTTPS, an invalid cursor or `source` filter, or a webhook test or secret rotation on a monitor without a webhook.
 
 ## Tech stack
 

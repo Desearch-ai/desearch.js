@@ -2855,9 +2855,9 @@ export interface CompanyResultsPage {
 // ============================================================================
 
 /**
- * Where a monitor looks. `instagram` and `facebook` read watched accounts only (they have no keyword
- * search), so they need `options.instagram.accounts` or `options.facebook.pages`. `meta_ads`
- * searches the Meta Ad Library by keyword.
+ * Where a monitor looks. `instagram` and `facebook` read watched feeds only (they have no keyword
+ * search), so they need `options.instagram.accounts` or `options.instagram.hashtags`, and
+ * `options.facebook.pages`. `meta_ads` searches the Meta Ad Library by keyword.
  */
 export type MonitorSource =
   | 'web'
@@ -2961,13 +2961,20 @@ export interface MonitorYouTubeOptions {
 
 /** TikTok settings of a monitor. */
 export interface MonitorTikTokOptions {
-  /** Posts read per run, per account with `accounts`: 10, 20 or 30 (default 10) */
+  /** Posts read per run, per account and per hashtag with `accounts` or `hashtags`: 10, 20 or 30 (default 10) */
   count?: 10 | 20 | 30;
   /**
    * Up to 10 TikTok usernames to watch instead of searching: `openai`, `@openai` or a profile URL.
    * The API returns them cleaned (`openai`) and answers 422 for an invalid name or more than 10.
    */
   accounts?: string[] | null;
+  /**
+   * Up to 10 hashtags to watch instead of searching, in any script: `aversi`, `#ავერსი` or a
+   * `https://www.tiktok.com/tag/aversi` URL. A hashtag feed lists posts from any account, so it finds
+   * posts outside the watched accounts. The API returns them without `#` (`aversi`) and answers 422
+   * for an invalid hashtag or more than 10.
+   */
+  hashtags?: string[] | null;
 }
 
 /** Threads settings of a monitor. */
@@ -2980,14 +2987,25 @@ export interface MonitorThreadsOptions {
   accounts?: string[] | null;
 }
 
-/** Instagram settings of a monitor. The `instagram` source reads watched accounts only. */
+/**
+ * Instagram settings of a monitor. The `instagram` source reads watched accounts and hashtags only,
+ * so it needs at least one of them (422 without).
+ */
 export interface MonitorInstagramOptions {
   /**
-   * 1-10 Instagram usernames to watch: `openai`, `@openai` or a profile URL. Required with the
-   * `instagram` source (422 without). The API returns them cleaned (`openai`) and answers 422 for an
-   * invalid name or more than 10. Each run reads up to 12 posts per account.
+   * Up to 10 Instagram usernames to watch: `openai`, `@openai` or a profile URL. The API returns
+   * them cleaned (`openai`) and answers 422 for an invalid name or more than 10. Each run reads up to
+   * 12 posts per account.
    */
   accounts?: string[] | null;
+  /**
+   * Up to 10 hashtags to watch, in any script: `aversi`, `#ავერსი` or a
+   * `https://www.instagram.com/explore/tags/aversi/` URL. A hashtag feed lists posts from any
+   * account, so it finds posts outside the watched accounts. The API returns them without `#`
+   * (`aversi`) and answers 422 for an invalid hashtag or more than 10. Each run reads up to 12 posts
+   * per hashtag.
+   */
+  hashtags?: string[] | null;
 }
 
 /** Facebook settings of a monitor. The `facebook` source reads watched pages only. */
@@ -2996,7 +3014,8 @@ export interface MonitorFacebookOptions {
    * 1-10 Facebook page names or numeric IDs to watch: `NASA`, `100064869009429` or a page URL.
    * Required with the `facebook` source (422 without). The API returns a page URL as its name, and
    * `profile.php?id=...` and `/pages/Name/123...` as the ID, and answers 422 for an invalid page or
-   * more than 10. Each run reads up to 10 posts per page. For ads by keyword, use `meta_ads`.
+   * more than 10. Each run reads up to 10 posts per page. Facebook has no organic hashtag feed; for
+   * ads by keyword, use `meta_ads`.
    */
   pages?: string[] | null;
 }
@@ -3010,9 +3029,10 @@ export interface MonitorMetaAdsOptions {
 /**
  * Per-source settings. A source with watched accounts (`x.accounts`, `reddit.subreddits`,
  * `youtube.channels`, `tiktok.accounts`, `threads.accounts`, `instagram.accounts`,
- * `facebook.pages`) reads their newest posts each run instead of searching; the query and criteria
- * still decide what is kept, and `min_score: 0` keeps every new post. `instagram` and `facebook`
- * need accounts: create and update answer 422 when either source has none.
+ * `facebook.pages`) or watched hashtags (`tiktok.hashtags`, `instagram.hashtags`) reads those
+ * feeds each run instead of searching; the query and criteria still decide what is kept, and
+ * `min_score: 0` keeps every new post. `instagram` needs accounts or hashtags and `facebook` pages:
+ * create and update answer 422 when either source has none.
  */
 export interface MonitorOptions {
   web?: MonitorWebOptions | null;
@@ -3226,9 +3246,11 @@ export interface MonitorRunSourceStats {
   error?: string | null;
   /**
    * Watched accounts that could not be read (unknown or private). The source fails only when all of
-   * its accounts do.
+   * its accounts and hashtags do.
    */
   accounts_failed?: string[];
+  /** Watched hashtags that could not be read (TikTok and Instagram). */
+  hashtags_failed?: string[];
   [key: string]: unknown;
 }
 
@@ -3239,8 +3261,8 @@ export interface MonitorRunStats {
   screened?: number;
   /** Items kept */
   passed?: number;
-  /** `jev`, or `keyword` when the run fell back to a keyword screen */
-  screen?: 'jev' | 'keyword' | (string & {});
+  /** `ai` (screened by an AI classifier), or `keyword` when the run fell back to a keyword screen */
+  screen?: 'ai' | 'keyword' | (string & {});
   [key: string]: unknown;
 }
 
@@ -3288,7 +3310,7 @@ export interface MonitorItemAuthor {
   [key: string]: unknown;
 }
 
-/** Jev's answers for an item, 0-1. */
+/** The AI screen's answers for an item, 0-1. */
 export interface MonitorItemSignals {
   /** The item is about what the monitor watches */
   relevant?: number | null;
@@ -3315,13 +3337,15 @@ export interface MonitorItem {
   found_at: string;
   /**
    * Source fields: X `likes`, `reposts`, `replies`, `views`; Reddit `subreddit`, `score`, `comments`;
-   * YouTube `channel`, `views`, `thumbnail`; TikTok `views`, `likes`, `comments`, `shares`,
-   * `duration_s`, `thumbnail` (TikTok thumbnail URLs expire); Threads `likes`; Instagram `likes`,
-   * `comments`, `views`, `media_type`, `thumbnail` (these URLs expire too); Facebook `reactions`,
-   * `comments`, `shares`; Meta ads `page`, `active`, `cta`, `link`, `platforms`, `thumbnail`; web
-   * `highlights`, `domain`. An item read from a watched account also has `account`, the name it was
-   * watched as. `MonitorThreadsItemData`, `MonitorInstagramItemData`, `MonitorFacebookItemData` and
-   * `MonitorMetaAdsItemData` type the fields of those sources.
+   * YouTube `channel`, `views`, `thumbnail`; TikTok `views`, `likes`, `comments`, `shares`, `saves`,
+   * `duration_s`; Threads `likes`; Instagram `likes`, `comments`, `views`, `media_type`; Facebook
+   * `reactions`, `comments`, `shares`, `views`; Meta ads `page`, `active`, `cta`, `link`,
+   * `platforms`, `thumbnail`; web `highlights`, `domain`. TikTok, Instagram and Facebook items also
+   * have `post_id`, `type`, `hashtags`, `mentions` (TikTok and Instagram), `media` and `thumbnail`
+   * (see `MonitorSocialPostItemData`). An item read from a watched account also has `account`, the
+   * name it was watched as, and one read from a watched hashtag has `hashtag`.
+   * `MonitorTikTokItemData`, `MonitorThreadsItemData`, `MonitorInstagramItemData`,
+   * `MonitorFacebookItemData` and `MonitorMetaAdsItemData` type the fields of those sources.
    */
   data: MonitorItemData;
 }
@@ -3330,7 +3354,40 @@ export interface MonitorItem {
 export interface MonitorItemData {
   /** The watched account the item was read from, as the monitor stores it */
   account?: string;
+  /** The watched hashtag the item was read from, without `#` (TikTok and Instagram) */
+  hashtag?: string;
   [key: string]: unknown;
+}
+
+/**
+ * Post fields of a TikTok, Instagram or Facebook item. The metrics are the post's when the run found
+ * it; `GET /desearch/social/post?url=<link>` reads them again (`author=true` adds the author's
+ * followers).
+ */
+export interface MonitorSocialPostItemData extends MonitorItemData {
+  /** The ID `GET /desearch/social/post` gives the same post (an Instagram shortcode) */
+  post_id?: string | null;
+  /** `video`, `image`, `carousel`, `reel`, ..., as `GET /desearch/social/post` names it */
+  type?: string | null;
+  /** Hashtags of the post, without `#` */
+  hashtags?: string[];
+  /** Links to the post's videos and pictures. They expire after a few days, so copy what you keep. */
+  media?: string[];
+  /** The cover image. The link expires too. */
+  thumbnail?: string | null;
+}
+
+/** `data` of a TikTok item (`source: 'tiktok'`). */
+export interface MonitorTikTokItemData extends MonitorSocialPostItemData {
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  /** Times the video was saved */
+  saves?: number | null;
+  duration_s?: number | null;
+  /** Accounts the post mentions, without `@` */
+  mentions?: string[];
 }
 
 /** `data` of a Threads item (`source: 'threads'`). */
@@ -3338,23 +3395,25 @@ export interface MonitorThreadsItemData extends MonitorItemData {
   likes?: number | null;
 }
 
-/** `data` of an Instagram item (`source: 'instagram'`), always read from a watched account. */
-export interface MonitorInstagramItemData extends MonitorItemData {
+/** `data` of an Instagram item (`source: 'instagram'`), read from a watched account or hashtag. */
+export interface MonitorInstagramItemData extends MonitorSocialPostItemData {
   likes?: number | null;
   comments?: number | null;
   /** Plays of a video or reel */
   views?: number | null;
   /** The post's media type as Instagram reports it */
   media_type?: string | null;
-  /** The cover image. Instagram image URLs expire, so copy the image if you keep it. */
-  thumbnail?: string | null;
+  /** Accounts the post mentions, without `@` */
+  mentions?: string[];
 }
 
 /** `data` of a Facebook item (`source: 'facebook'`), a post of a watched page. */
-export interface MonitorFacebookItemData extends MonitorItemData {
+export interface MonitorFacebookItemData extends MonitorSocialPostItemData {
   reactions?: number | null;
   comments?: number | null;
   shares?: number | null;
+  /** Plays of a video or reel */
+  views?: number | null;
 }
 
 /**

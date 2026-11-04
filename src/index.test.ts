@@ -25,6 +25,7 @@ import type {
   MonitorMetaAdsItemData,
   MonitorRun,
   MonitorThreadsItemData,
+  MonitorTikTokItemData,
   MonitorWebhookDelivery,
   MonitorWebhookEvent,
   NetworkStatsResponse,
@@ -3360,7 +3361,7 @@ describe('Monitors', () => {
         },
         screened: 7,
         passed: 1,
-        screen: 'jev',
+        screen: 'ai',
       },
       summary: null,
       reserved_usd: 0.0098,
@@ -3845,7 +3846,7 @@ describe('Monitors', () => {
           },
           screened: 4,
           passed: 1,
-          screen: 'jev',
+          screen: 'ai',
         },
       }),
       items: [tiktokItem],
@@ -3860,6 +3861,102 @@ describe('Monitors', () => {
     expect(result.items[0].source).toBe('tiktok');
     expect(result.items[0].data.account).toBe('openai');
     expect(result.items[0].data.duration_s).toBe(42);
+  });
+
+  it('sends TikTok and Instagram hashtags as given, and returns them as the API cleaned them', async () => {
+    const cleaned = monitor({
+      sources: ['tiktok', 'instagram'],
+      options: {
+        tiktok: { count: 10, accounts: ['openai'], hashtags: ['ავერსი', 'aversi'] },
+        instagram: { hashtags: ['aversi', 'ავერსი'] },
+      },
+      min_score: 0,
+    });
+    mockResponse({ body: cleaned, status: 201 });
+
+    const client = new Desearch('test-key');
+    const options = {
+      tiktok: {
+        accounts: ['@openai'],
+        hashtags: ['#ავერსი', 'https://www.tiktok.com/tag/aversi'],
+      },
+      // Instagram may watch hashtags without accounts.
+      instagram: {
+        hashtags: ['https://www.instagram.com/explore/tags/aversi/', 'ავერსი'],
+      },
+    };
+    const result = await client.createMonitor({
+      query: 'Aversi pharmacies',
+      sources: ['tiktok', 'instagram'],
+      options,
+      min_score: 0,
+    });
+    expect(result.options.tiktok?.hashtags).toEqual(['ავერსი', 'aversi']);
+    expect(result.options.instagram?.hashtags).toEqual(['aversi', 'ავერსი']);
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      query: 'Aversi pharmacies',
+      sources: ['tiktok', 'instagram'],
+      options,
+      min_score: 0,
+    });
+  });
+
+  it('reads hashtags_failed from run stats and the hashtag and post fields from items', async () => {
+    const tiktokItem = item('78', {
+      source: 'tiktok',
+      url: 'https://www.tiktok.com/@someone/video/7570000000000000001',
+      data: {
+        hashtag: 'aversi',
+        post_id: '7570000000000000001',
+        type: 'video',
+        views: 3400,
+        likes: 210,
+        comments: 8,
+        shares: 3,
+        saves: 14,
+        duration_s: 21,
+        hashtags: ['aversi', 'pharmacy'],
+        mentions: ['aversipharma'],
+        media: ['https://v16.tiktokcdn.com/video.mp4'],
+        thumbnail: 'https://p16-sign.tiktokcdn.com/thumb.jpeg',
+      },
+    });
+    const facebookItem = item('79', {
+      source: 'facebook',
+      data: { account: 'NASA', post_id: '1234567890', type: 'reel', views: 52000, hashtags: [], media: [] },
+    });
+    const detail = {
+      ...run({
+        stats: {
+          sources: {
+            instagram: {
+              fetched: 12,
+              in_window: 3,
+              new: 3,
+              passed: 0,
+              error: null,
+              hashtags_failed: ['gone_tag'],
+            },
+          },
+          screened: 3,
+          passed: 0,
+          screen: 'ai',
+        },
+      }),
+      items: [tiktokItem, facebookItem],
+    };
+    mockResponse({ body: detail });
+
+    const client = new Desearch('test-key');
+    const result = await client.getMonitorRun(run());
+    expect(result.stats.screen).toBe('ai');
+    expect(result.stats.sources?.instagram?.hashtags_failed).toEqual(['gone_tag']);
+    const tiktok = result.items[0].data as MonitorTikTokItemData;
+    expect(tiktok.hashtag).toBe('aversi');
+    expect(tiktok.post_id).toBe('7570000000000000001');
+    expect(tiktok.saves).toBe(14);
+    expect(tiktok.mentions).toEqual(['aversipharma']);
+    expect((result.items[1].data as MonitorFacebookItemData).views).toBe(52000);
   });
 
   it('sends the Instagram, Facebook and Meta ads sources and Threads accounts as given, and returns them as the API cleaned them', async () => {
@@ -3946,7 +4043,7 @@ describe('Monitors', () => {
   it('surfaces an Instagram or Facebook source without accounts as HTTP 422, on create and update', async () => {
     // Create: a body validator, so detail is a list; PATCH checks the monitor as patched.
     mockResponse({
-      body: '{"detail":[{"type":"value_error","loc":["body"],"msg":"Value error, Instagram watches accounts: add at least one in options.instagram.accounts"}]}',
+      body: '{"detail":[{"type":"value_error","loc":["body"],"msg":"Value error, Instagram watches accounts or hashtags: add at least one in options.instagram.accounts or options.instagram.hashtags"}]}',
       ok: false,
       status: 422,
     });
@@ -3962,7 +4059,7 @@ describe('Monitors', () => {
         query: 'Product launches',
         sources: ['instagram'],
       })
-    ).rejects.toThrow(/^HTTP 422: .*options\.instagram\.accounts/);
+    ).rejects.toThrow(/^HTTP 422: .*options\.instagram\.accounts or options\.instagram\.hashtags/);
     await expect(
       client.updateMonitor(
         { monitor_id: MONITOR_ID },

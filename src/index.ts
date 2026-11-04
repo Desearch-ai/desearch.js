@@ -3263,7 +3263,7 @@ export class Desearch {
    * Create a monitor: a search that runs on a schedule (`interval`, 1h to 7d) and keeps only what is new since its last run.
    *
    * Each run searches its `sources` from where the previous run ended, drops everything the monitor has already seen,
-   * screens the rest with Jev (relevant, new information, and one question per criterion; `score` is the lowest of
+   * screens the rest with an AI classifier (relevant, new information, and one question per criterion; `score` is the lowest of
    * these, kept at `min_score`) and sends what it keeps to the `webhook`. With `run_now` (the default) the first run is
    * queued at once.
    *
@@ -3274,7 +3274,8 @@ export class Desearch {
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
    * @returns The monitor (HTTP 201). With a webhook it carries `webhook_secret`, returned only here and by `rotateMonitorWebhookSecret`.
    * @throws Error `HTTP 402` when the balance cannot hold one run, `HTTP 409` when the account already has 25 monitors,
-   * `HTTP 422` for an invalid field, including an `instagram` or `facebook` source without `options.instagram.accounts` or `options.facebook.pages`.
+   * `HTTP 422` for an invalid field, including an `instagram` source without `options.instagram.accounts` or
+   * `options.instagram.hashtags`, or a `facebook` source without `options.facebook.pages`.
    */
   async createMonitor(
     payload: MonitorCreateRequest,
@@ -3406,7 +3407,8 @@ export class Desearch {
    * @param fields - The fields to change: query, name, criteria, sources, interval, options, min_score, summary, status, webhook and metadata.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
    * @returns The monitor after the change, or a metadata wrapper when opted in.
-   * @throws Error `HTTP 422` for an invalid field, or when the monitor as changed has an `instagram` or `facebook` source without accounts.
+   * @throws Error `HTTP 422` for an invalid field, or when the monitor as changed has an `instagram` source without accounts or
+   * hashtags, or a `facebook` source without pages.
    */
   async updateMonitor(
     params: MonitorParams,

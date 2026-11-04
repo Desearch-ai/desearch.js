@@ -64,7 +64,7 @@ function message(error) {
   return text.split(apiKey).join('***');
 }
 
-/** Runs `run` once more after an HTTP 5xx, the known transient ScrapeCreators failure. */
+/** Runs `run` once more after an HTTP 5xx, which is usually transient. */
 async function withRetry(run) {
   try {
     return { result: await run(), retried: false };

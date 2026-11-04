@@ -19,8 +19,13 @@ import type {
   CompanyTaskStage,
   InstagramSearchResultType,
   Monitor,
+  MonitorFacebookItemData,
+  MonitorInstagramItemData,
   MonitorItem,
+  MonitorMetaAdsItemData,
   MonitorRun,
+  MonitorThreadsItemData,
+  MonitorWebhookDelivery,
   MonitorWebhookEvent,
   NetworkStatsResponse,
   NetworkStatsStreamEvent,
@@ -1239,6 +1244,13 @@ describe('Social routes (TikTok, Facebook, Instagram)', () => {
       call: (c: Desearch) => c.facebookSearch({ query: 'running shoes' }),
       path: '/desearch/facebook/search',
       body: { query: 'running shoes' },
+    },
+    {
+      name: 'facebookSearch (sort)',
+      call: (c: Desearch) =>
+        c.facebookSearch({ query: 'ChatGPT', count: 2, sort: 'recent' }),
+      path: '/desearch/facebook/search',
+      body: { query: 'ChatGPT', count: 2, sort: 'recent' },
     },
     {
       name: 'instagramSearch',
@@ -3313,6 +3325,7 @@ describe('Monitors', () => {
         url: 'https://example.com/hooks/desearch',
         events: ['monitor.items.found', 'monitor.run.failed'],
         consecutive_failures: 0,
+        last_delivery: null,
       },
       metadata: { team: 'growth' },
       max_run_cost_usd: 0.0098,
@@ -3849,6 +3862,220 @@ describe('Monitors', () => {
     expect(result.items[0].data.duration_s).toBe(42);
   });
 
+  it('sends the Instagram, Facebook and Meta ads sources and Threads accounts as given, and returns them as the API cleaned them', async () => {
+    const sources: Monitor['sources'] = [
+      'instagram',
+      'facebook',
+      'threads',
+      'meta_ads',
+    ];
+    const cleaned = monitor({
+      query: 'ChatGPT',
+      sources,
+      options: {
+        instagram: { accounts: ['openai', 'nasa'] },
+        facebook: { pages: ['NASA', '100064869009429'] },
+        threads: { accounts: ['zuck', 'mosseri'] },
+        meta_ads: { count: 20 },
+      },
+    });
+    const estimate = {
+      max_run_cost_usd: 0.1449,
+      runs_per_month: 30,
+      max_monthly_cost_usd: 4.347,
+      breakdown: {
+        instagram: 0.04968,
+        facebook: 0.0414,
+        threads: 0.00414,
+        meta_ads: 0.0414,
+        screening: 0.00828,
+      },
+    };
+    mockResponse({ body: estimate });
+    mockResponse({ body: cleaned, status: 201 });
+    mockResponse({ body: cleaned });
+
+    const client = new Desearch('test-key');
+    const options = {
+      instagram: {
+        accounts: ['@openai', 'https://www.instagram.com/nasa/?hl=en'],
+      },
+      facebook: {
+        pages: [
+          'https://www.facebook.com/NASA/',
+          'https://www.facebook.com/profile.php?id=100064869009429',
+        ],
+      },
+      threads: { accounts: ['https://www.threads.com/@zuck', '@mosseri'] },
+      meta_ads: { count: 20 as const },
+    };
+    await expect(client.estimateMonitor({ sources, options })).resolves.toEqual(
+      estimate
+    );
+    const result = await client.createMonitor({
+      query: 'ChatGPT',
+      sources,
+      options,
+    });
+    expect(result.options.instagram?.accounts).toEqual(['openai', 'nasa']);
+    expect(result.options.facebook?.pages).toEqual(['NASA', '100064869009429']);
+    expect(result.options.threads?.accounts).toEqual(['zuck', 'mosseri']);
+    expect(result.options.meta_ads?.count).toBe(20);
+    await client.updateMonitor(result, {
+      options: { ...result.options, meta_ads: { count: 30 } },
+    });
+
+    expect(fetchCall(0).url).toBe(`${API}/desearch/monitors/estimate`);
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({ sources, options });
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({
+      query: 'ChatGPT',
+      sources,
+      options,
+    });
+    expect(fetchCall(2).method).toBe('PATCH');
+    expect(JSON.parse(fetchCall(2).body!)).toEqual({
+      options: {
+        instagram: { accounts: ['openai', 'nasa'] },
+        facebook: { pages: ['NASA', '100064869009429'] },
+        threads: { accounts: ['zuck', 'mosseri'] },
+        meta_ads: { count: 30 },
+      },
+    });
+  });
+
+  it('surfaces an Instagram or Facebook source without accounts as HTTP 422, on create and update', async () => {
+    // Create: a body validator, so detail is a list; PATCH checks the monitor as patched.
+    mockResponse({
+      body: '{"detail":[{"type":"value_error","loc":["body"],"msg":"Value error, Instagram watches accounts: add at least one in options.instagram.accounts"}]}',
+      ok: false,
+      status: 422,
+    });
+    mockResponse({
+      body: '{"detail":"Facebook watches pages: add at least one in options.facebook.pages"}',
+      ok: false,
+      status: 422,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.createMonitor({
+        query: 'Product launches',
+        sources: ['instagram'],
+      })
+    ).rejects.toThrow(/^HTTP 422: .*options\.instagram\.accounts/);
+    await expect(
+      client.updateMonitor(
+        { monitor_id: MONITOR_ID },
+        { sources: ['x', 'facebook'] }
+      )
+    ).rejects.toThrow(/^HTTP 422: .*options\.facebook\.pages/);
+    expect(JSON.parse(fetchCall(1).body!)).toEqual({
+      sources: ['x', 'facebook'],
+    });
+  });
+
+  it('reads webhook.last_delivery: null before the first delivery, then the newest delivery', async () => {
+    const pending: MonitorWebhookDelivery = {
+      event: 'monitor.items.found',
+      status: 'pending',
+      attempts: 2,
+      status_code: 503,
+      error: 'HTTP 503',
+      created_at: '2026-11-04T09:00:41Z',
+      next_attempt_at: '2026-11-04T09:06:41Z',
+      delivered_at: null,
+    };
+    mockResponse({ body: monitor() });
+    mockResponse({
+      body: monitor({
+        webhook: {
+          url: 'https://example.com/hooks/desearch',
+          events: ['monitor.items.found', 'monitor.run.failed'],
+          consecutive_failures: 0,
+          last_delivery: pending,
+        },
+      }),
+    });
+
+    const client = new Desearch('test-key');
+    const fresh = await client.getMonitor({ monitor_id: MONITOR_ID });
+    expect(fresh.webhook).toHaveProperty('last_delivery', null);
+    const retrying = await client.getMonitor({ monitor_id: MONITOR_ID });
+    expect(retrying.webhook?.last_delivery).toEqual(pending);
+    expect(retrying.webhook?.last_delivery?.status).toBe('pending');
+    expect(retrying.webhook?.last_delivery?.next_attempt_at).toBe(
+      '2026-11-04T09:06:41Z'
+    );
+  });
+
+  it('filters items by the new sources and reads their fields and signals.criteria', async () => {
+    const ad = item('91', {
+      source: 'meta_ads',
+      url: 'https://www.facebook.com/ads/library/?id=1234567890',
+      title: 'Try ChatGPT for work',
+      text: 'Draft, summarize and brainstorm with ChatGPT.',
+      author: { name: 'OpenAI', handle: null, url: null },
+      score: 95,
+      signals: { relevant: 0.95, criteria: 0.97 },
+      data: {
+        page: 'OpenAI',
+        active: true,
+        cta: 'Learn more',
+        link: 'https://chatgpt.com/',
+        platforms: ['facebook', 'instagram'],
+        thumbnail: 'https://scontent.xx.fbcdn.net/ad.jpg',
+      },
+    });
+    const items = [
+      ad,
+      item('92', {
+        source: 'instagram',
+        data: {
+          account: 'nasa',
+          likes: 51000,
+          comments: 420,
+          views: null,
+          media_type: 'image',
+          thumbnail: 'https://scontent.cdninstagram.com/thumb.jpg',
+        },
+      }),
+      item('93', {
+        source: 'facebook',
+        data: { account: 'NASA', reactions: 3100, comments: 210, shares: 95 },
+      }),
+      item('94', {
+        source: 'threads',
+        data: { account: 'zuck', likes: 8800 },
+      }),
+    ];
+    mockResponse({ body: { items: [ad], next_cursor: null } });
+    mockResponse({ body: { items, next_cursor: null } });
+
+    const client = new Desearch('test-key');
+    const ads = await client.listMonitorItems({
+      monitor_id: MONITOR_ID,
+      source: 'meta_ads',
+    });
+    const all = await client.listMonitorItems({ monitor_id: MONITOR_ID });
+
+    expect(fetchCall(0).url).toBe(
+      `${API}/desearch/monitors/${MONITOR_ID}/items?source=meta_ads`
+    );
+    expect(ads.items[0].signals.criteria).toBe(0.97);
+    expect(ads.items[0].signals.new_info).toBeUndefined();
+    const adData = ads.items[0].data as MonitorMetaAdsItemData;
+    expect(adData.link).toBe('https://chatgpt.com/');
+    expect(adData.platforms).toEqual(['facebook', 'instagram']);
+    expect(adData.active).toBe(true);
+    const [, instagram, facebook, threads] = all.items;
+    expect((instagram.data as MonitorInstagramItemData).media_type).toBe(
+      'image'
+    );
+    expect(instagram.data.account).toBe('nasa');
+    expect((facebook.data as MonitorFacebookItemData).reactions).toBe(3100);
+    expect((threads.data as MonitorThreadsItemData).likes).toBe(8800);
+  });
+
   it('types the requests to the values the API documents', () => {
     const client = new Desearch('test-key');
     // Type-only checks: compiled by `tsc --noEmit`; these calls are never awaited or sent.
@@ -3870,23 +4097,53 @@ describe('Monitors', () => {
     const badTikTokCount = () =>
       // @ts-expect-error tiktok.count is 10, 20 or 30
       client.estimateMonitor({ options: { tiktok: { count: 15 } } });
-    const badThreads = () =>
+    const social = () =>
+      client.createMonitor({
+        query: 'ChatGPT',
+        sources: ['instagram', 'facebook', 'threads', 'meta_ads'],
+        options: {
+          instagram: { accounts: ['@openai'] },
+          facebook: { pages: ['NASA'] },
+          threads: { accounts: ['@zuck'] },
+          meta_ads: { count: 30 },
+        },
+      });
+    const badMetaAdsCount = () =>
+      // @ts-expect-error meta_ads.count is 10, 20 or 30
+      client.estimateMonitor({ options: { meta_ads: { count: 15 } } });
+    const badFacebookAccounts = () =>
       client.estimateMonitor({
-        // @ts-expect-error threads has no accounts
-        options: { threads: { accounts: ['zuck'] } },
+        // @ts-expect-error facebook watches pages, not accounts
+        options: { facebook: { accounts: ['NASA'] } },
+      });
+    const badThreadsCount = () =>
+      client.estimateMonitor({
+        // @ts-expect-error threads has no count
+        options: { threads: { count: 10 } },
       });
     const badStatus = () =>
       // @ts-expect-error status is active or paused
       client.updateMonitor({ monitor_id: MONITOR_ID }, { status: 'deleted' });
+    const badItemsSource = () =>
+      // @ts-expect-error ads is not a monitor source (meta_ads is)
+      client.listMonitorItems({ monitor_id: MONITOR_ID, source: 'ads' });
+    const badFacebookSort = () =>
+      // @ts-expect-error facebookSearch sort is impressions or recent
+      client.facebookSearch({ query: 'q', sort: 'latest' });
     expect([
       badInterval,
       badSource,
       tiktok,
       badWebCount,
       badTikTokCount,
-      badThreads,
+      social,
+      badMetaAdsCount,
+      badFacebookAccounts,
+      badThreadsCount,
       badStatus,
-    ]).toHaveLength(7);
+      badItemsSource,
+      badFacebookSort,
+    ]).toHaveLength(12);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

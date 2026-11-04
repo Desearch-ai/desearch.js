@@ -25,7 +25,7 @@ What it covers today:
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 - Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
-- Monitors: searches over web, X, Reddit, YouTube, Threads and TikTok, or watched accounts, that run on a schedule and keep only what is new, with a webhook signature check
+- Monitors: searches over web, X, Reddit, YouTube, Threads, TikTok and the Meta Ad Library, or watched accounts (Instagram and Facebook pages too), that run on a schedule and keep only what is new, with a webhook signature check
 - public network stats, including a live Server-Sent Events stream
 
 What it does not try to be:
@@ -353,7 +353,7 @@ const profile = await client.tiktokProfile({ username: 'tiktok' });
 const comments = await client.tiktokComments({ video_id: posts[0].id!, count: 20 });
 const trending = await client.tiktokTrending({ region: 'US', count: 10 });
 
-const ads = await client.facebookSearch({ query: 'running shoes' });
+const ads = await client.facebookSearch({ query: 'running shoes', sort: 'recent' });
 const page = await client.facebookProfile({ profile_id: 'facebook' });
 const pagePosts = await client.facebookProfilePosts({ profile_id: 'facebook' });
 const post = await client.facebookPostById({ id: 'Meta/posts/1040495851972958' });
@@ -369,6 +369,7 @@ Notes:
 - The SDK URL-encodes path parameters. An ID or post URL that contains `/`, such as `Meta/posts/1040495851972958`, works on the post, media and comments routes.
 - A TikTok post `id` works with `tiktokComments` and `tiktokPostById`. `instagramComments` takes the post shortcode (the code in the post URL); numeric media IDs return 404.
 - Facebook search and hashtag read the public Meta Ad Library. Organic Facebook post search is not available.
+- `facebookSearch` takes `sort`: `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping, which puts recently started ads first).
 - Fields the provider does not send are left out of each object, so every field of `TikTokPost`, `FacebookPost`, `InstagramMedia` and the other social types is optional.
 
 ### YouTube, Reddit and Threads
@@ -882,7 +883,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 
 ## Monitors
 
-A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). Kept items go to your webhook and stay readable through the API.
+A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`, `instagram`, `facebook`, `meta_ads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with Jev: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). `item.signals` holds the answers (0-1): `relevant`, `new_info` and, when the monitor has criteria, `criteria`, the lowest answer across them. Kept items go to your webhook and stay readable through the API.
 
 ### End-to-end example
 
@@ -927,13 +928,13 @@ await client.deleteMonitor(monitor);
 
 `createMonitor` takes `query` (3-500 characters; the only required field), `name`, `criteria` (up to 5, each at most 300 characters), `sources` (default `['web', 'x']`), `interval` (default `1d`), `options`, `min_score` (0-100, default 60), `summary` (default false), `webhook` (`{ url, events }`), `metadata` (up to 20 string keys) and `run_now` (default true):
 
-- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10) and `accounts`; `options.reddit` takes `subreddits` and `options.youtube` takes `channels`. Threads has no options.
+- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10) and `accounts`; `options.reddit` takes `subreddits`, `options.youtube` takes `channels` and `options.threads` takes `accounts`; `options.instagram.accounts` and `options.facebook.pages` are required with those sources; `options.meta_ads.count` is 10, 20 or 30 (default 10).
 - `summary: true` adds a short LLM digest of the items each run keeps (`run.summary`).
 - `webhook.events` is any of `monitor.items.found` (a run kept at least one item), `monitor.run.completed` and `monitor.run.failed`. The default is `['monitor.items.found', 'monitor.run.failed']`. The URL must be HTTPS on a public address; redirects are not followed.
 
 ### Watched accounts
 
-A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels` and `options.tiktok.accounts`. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
+A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels`, `options.tiktok.accounts` and `options.threads.accounts`. Instagram (`options.instagram.accounts`) and Facebook (`options.facebook.pages`) only watch accounts, as neither has a keyword search for posts: a monitor with either source needs at least one. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
 
 ```ts
 const watched = await client.createMonitor({
@@ -948,13 +949,46 @@ const watched = await client.createMonitor({
   min_score: 0,
 });
 console.log(watched.options.x?.accounts); // ['OpenAI', 'AnthropicAI']
+
+const social = await client.createMonitor({
+  query: 'Product launches and campaigns',
+  sources: ['instagram', 'facebook', 'threads'],
+  options: {
+    instagram: { accounts: ['@openai', 'https://www.instagram.com/nasa/'] },
+    facebook: { pages: ['https://www.facebook.com/NASA/', '100064869009429'] },
+    threads: { accounts: ['https://www.threads.com/@zuck'] },
+  },
+  min_score: 0,
+});
+console.log(social.options.facebook?.pages); // ['NASA', '100064869009429']
 ```
 
-- Send names the way people paste them: `OpenAI`, `@OpenAI` or a profile URL for X; `LocalLLaMA`, `r/LocalLLaMA` or a URL for Reddit; `@handle`, a `UC...` channel ID or a channel URL for YouTube; `openai`, `@openai` or a profile URL for TikTok. The API cleans them and returns them that way (`OpenAI`, `LocalLLaMA`, `@OpenAI` or `UC...`, `openai`); the SDK sends them as given. An invalid name, or more than 10 on one source, is an `HTTP 422` error.
-- With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account.
+- Send names the way people paste them: `OpenAI`, `@OpenAI` or a profile URL for X (at most 15 characters); `LocalLLaMA`, `r/LocalLLaMA` or a URL for Reddit; `@handle`, a `UC...` channel ID or a channel URL for YouTube; `openai`, `@openai` or a profile URL for TikTok, Instagram and Threads; a page name, a numeric page ID or a page URL for Facebook (`profile.php?id=...` and `/pages/Name/123...` URLs give the ID). The API cleans them and returns them that way (`OpenAI`, `LocalLLaMA`, `@OpenAI` or `UC...`, `openai`, `NASA` or `100064869009429`); the SDK sends them as given. An invalid name, or more than 10 on one source, is an `HTTP 422` error, and so is an `instagram` or `facebook` source without accounts, on create and on update (`updateMonitor` checks the monitor as changed).
+- With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account. Instagram reads up to 12 posts per account and Facebook up to 10 per page.
 - An item read from a watched account has `data.account`, the name it was watched as. An account that cannot be read (unknown or private) is listed in the run's `stats.sources.<source>.accounts_failed`; the source fails only when all of its accounts do.
 - TikTok items have `data.views`, `likes`, `comments`, `shares`, `duration_s` and `thumbnail`. TikTok thumbnail URLs expire, so copy the image if you keep it.
-- TikTok search has no working date filter and ranks by relevance, so a TikTok keyword monitor finds a new video only when it reaches TikTok's top results. To follow creators, watch their accounts (`options.tiktok.accounts`).
+- Threads items have `data.likes`; Instagram items `likes`, `comments`, `views`, `media_type` and `thumbnail` (these URLs expire too); Facebook items `reactions`, `comments` and `shares`. `MonitorThreadsItemData`, `MonitorInstagramItemData` and `MonitorFacebookItemData` type them.
+- TikTok search has no working date filter and ranks by relevance, so a TikTok keyword monitor finds a new video only when it reaches TikTok's top results. To follow creators, watch their accounts (`options.tiktok.accounts`). Threads keyword search returns loosely matched posts, so accounts work better there too.
+
+### Meta ads
+
+The `meta_ads` source searches the Meta Ad Library by keyword and reads `options.meta_ads.count` ads per run (10, 20 or 30, default 10). The Ad Library matches keywords, so the query should be a brand, product or short phrase (`ChatGPT`); a sentence finds nothing. It has no date filter: an ad is new the first time a run sees it, if it started within the last 30 days. Ads are screened with their own question (is the ad about what the monitor watches) and get no `new_info`.
+
+```ts
+import type { MonitorMetaAdsItemData } from 'desearch-js';
+
+const ads = await client.createMonitor({
+  query: 'ChatGPT',
+  sources: ['meta_ads'],
+  options: { meta_ads: { count: 20 } },
+});
+for await (const ad of client.iterMonitorItems({ monitor_id: ads.monitor_id, source: 'meta_ads' })) {
+  const data = ad.data as MonitorMetaAdsItemData;
+  console.log(ad.title, data.page, data.link, ad.url); // headline, page, landing page, Ad Library record
+}
+```
+
+A Meta ad item has the ad headline as `title`, its Ad Library record as `url` and when the ad started as `published_at`; `data` has `page`, `active`, `cta`, `link` (the landing page), `platforms` and `thumbnail` (`MonitorMetaAdsItemData`).
 
 `updateMonitor(monitor, fields)` takes the same fields, all optional, plus `status`. `status: 'paused'` stops scheduled runs; `status: 'active'` resumes them, also after the API paused the monitor itself (`paused_reason` `insufficient_credits` or `webhook_failing`). `webhook: null` removes the webhook.
 
@@ -982,15 +1016,17 @@ app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res
 
 `verifyWebhookSignature` returns false for a missing or malformed header, a wrong signature, or a timestamp more than 5 minutes from now (`toleranceSeconds` changes that). It compares in constant time and throws a `TypeError` when given a parsed object instead of the raw body. A delivery without a 2xx within 10 seconds is retried after 1, 5, 30, 120 and 360 minutes; after 5 deliveries in a row fail every attempt, the monitor pauses with `paused_reason: 'webhook_failing'`.
 
-`testMonitorWebhook(monitor)` sends a signed `monitor.test` event with one sample item and returns what your endpoint answered (`delivered`, `status_code`, `error`, `duration_ms`). `rotateMonitorWebhookSecret(monitor)` returns a new secret once; deliveries from then on are signed with it.
+`monitor.webhook.last_delivery` is the newest delivery, null before the first: `status` is `pending` while it waits for its first or next attempt (`next_attempt_at`, with the last answer in `status_code` and `error`), `delivered`, or `failed` after every retry, with `event`, `attempts`, `created_at` and `delivered_at`.
+
+`testMonitorWebhook(monitor)` sends a signed `monitor.test` event with one sample item and returns what your endpoint answered (`delivered`, `status_code`, `error`, `duration_ms`). A test is not a delivery: `last_delivery` stays as it was. `rotateMonitorWebhookSecret(monitor)` returns a new secret once; deliveries from then on are signed with it.
 
 ### Pricing
 
-Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit or a YouTube channel $0.00207 each, and TikTok $0.00207 per post (`tiktok.count` posts per account, or per search). `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), Jev screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. A watched account is one feed call per run at that feed's list price: an X account is about $0.003 (a 20-post timeline), a subreddit, a YouTube channel or a Threads account $0.00207 each, TikTok $0.00207 per post (`tiktok.count` posts per account, or per search), an Instagram account $0.02484 (12 posts) and a Facebook page $0.0207 (10 posts). Meta ads are $0.00207 per ad: $0.0207 for `meta_ads.count` 10, $0.0621 for 30. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
 
 ### Errors
 
-Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name or more than 10 accounts on a source), 402 when the balance cannot hold one run (create, trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook test or secret rotation on a monitor without a webhook.
+Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name, more than 10 accounts on a source, or an `instagram` or `facebook` source without accounts), 402 when the balance cannot hold one run (create, even with `run_now: false`, and trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook URL that is not public HTTPS, an invalid cursor or `source` filter, or a webhook test or secret rotation on a monitor without a webhook.
 
 ## Tech stack
 
@@ -1018,7 +1054,7 @@ Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid bod
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
 | `node scripts/e2e-youtube-reddit-threads.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the 16 YouTube, Reddit and Threads methods, with page 2 of each paginated one (billed, about $0.05; run `npm run build` first). Reads the key from `DESEARCH_API_KEY`, or the variable `--key-env` names, or `~/.config/desearch/e2e.env`. |
-| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME] [--with-accounts]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). `--with-accounts` adds a second monitor with the TikTok source and watched accounts and checks the cleaned names. Same key lookup as above. |
+| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME] [--with-accounts] [--with-meta]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). `--with-accounts` adds a second monitor with the TikTok source and watched accounts and checks the cleaned names. `--with-meta` adds one with the Instagram, Facebook, Meta ads and Threads sources and a webhook, and checks the cleaned names, the 422s for Instagram and Facebook without accounts, the estimate breakdown, `webhook.last_delivery` and the `meta_ads` items filter; it also makes one billed `facebookSearch` call with `sort: 'recent'` (2 ads, about $0.004). Same key lookup as above. |
 | `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the TikTok, Facebook, Instagram, Search API and network stats methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview

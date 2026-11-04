@@ -1417,9 +1417,17 @@ export interface FacebookSearchRequest {
   query: string;
   /** Maximum number of results to return (1-100, default 10). The provider page may be smaller. */
   count?: number;
-  /** `nextCursor` from the previous page, sent back unchanged with the same query */
+  /**
+   * `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping,
+   * which puts recently started ads first)
+   */
+  sort?: FacebookSearchSort | null;
+  /** `nextCursor` from the previous page, sent back unchanged with the same query and sort */
   cursor?: string | null;
 }
+
+/** Order of `facebookSearch` results. */
+export type FacebookSearchSort = 'impressions' | 'recent';
 
 export interface FacebookPostByIdParams {
   /** Facebook public post/media ID */
@@ -2846,14 +2854,21 @@ export interface CompanyResultsPage {
 // Monitors Types
 // ============================================================================
 
-/** Where a monitor looks. */
+/**
+ * Where a monitor looks. `instagram` and `facebook` read watched accounts only (they have no keyword
+ * search), so they need `options.instagram.accounts` or `options.facebook.pages`. `meta_ads`
+ * searches the Meta Ad Library by keyword.
+ */
 export type MonitorSource =
   | 'web'
   | 'x'
   | 'reddit'
   | 'youtube'
   | 'threads'
-  | 'tiktok';
+  | 'tiktok'
+  | 'instagram'
+  | 'facebook'
+  | 'meta_ads';
 
 /** How often a monitor runs. */
 export type MonitorInterval = '1h' | '3h' | '6h' | '12h' | '1d' | '7d';
@@ -2955,19 +2970,60 @@ export interface MonitorTikTokOptions {
   accounts?: string[] | null;
 }
 
+/** Threads settings of a monitor. */
+export interface MonitorThreadsOptions {
+  /**
+   * Up to 10 Threads usernames to watch instead of searching: `zuck`, `@zuck` or a profile URL. The
+   * API returns them cleaned (`zuck`) and answers 422 for an invalid name or more than 10. Threads
+   * keyword search returns loosely matched posts, so accounts work better.
+   */
+  accounts?: string[] | null;
+}
+
+/** Instagram settings of a monitor. The `instagram` source reads watched accounts only. */
+export interface MonitorInstagramOptions {
+  /**
+   * 1-10 Instagram usernames to watch: `openai`, `@openai` or a profile URL. Required with the
+   * `instagram` source (422 without). The API returns them cleaned (`openai`) and answers 422 for an
+   * invalid name or more than 10. Each run reads up to 12 posts per account.
+   */
+  accounts?: string[] | null;
+}
+
+/** Facebook settings of a monitor. The `facebook` source reads watched pages only. */
+export interface MonitorFacebookOptions {
+  /**
+   * 1-10 Facebook page names or numeric IDs to watch: `NASA`, `100064869009429` or a page URL.
+   * Required with the `facebook` source (422 without). The API returns a page URL as its name, and
+   * `profile.php?id=...` and `/pages/Name/123...` as the ID, and answers 422 for an invalid page or
+   * more than 10. Each run reads up to 10 posts per page. For ads by keyword, use `meta_ads`.
+   */
+  pages?: string[] | null;
+}
+
+/** Meta ads settings of a monitor. */
+export interface MonitorMetaAdsOptions {
+  /** Meta Ad Library results read per run: 10, 20 or 30 (default 10) */
+  count?: 10 | 20 | 30;
+}
+
 /**
  * Per-source settings. A source with watched accounts (`x.accounts`, `reddit.subreddits`,
- * `youtube.channels`, `tiktok.accounts`) reads their newest posts each run instead of searching;
- * the query and criteria still decide what is kept, and `min_score: 0` keeps every new post.
- * Threads has no settings.
+ * `youtube.channels`, `tiktok.accounts`, `threads.accounts`, `instagram.accounts`,
+ * `facebook.pages`) reads their newest posts each run instead of searching; the query and criteria
+ * still decide what is kept, and `min_score: 0` keeps every new post. `instagram` and `facebook`
+ * need accounts: create and update answer 422 when either source has none.
  */
 export interface MonitorOptions {
   web?: MonitorWebOptions | null;
   x?: MonitorXOptions | null;
   reddit?: MonitorRedditOptions | null;
   youtube?: MonitorYouTubeOptions | null;
-  threads?: Record<string, never> | null;
+  threads?: MonitorThreadsOptions | null;
   tiktok?: MonitorTikTokOptions | null;
+  instagram?: MonitorInstagramOptions | null;
+  facebook?: MonitorFacebookOptions | null;
+  meta_ads?: MonitorMetaAdsOptions | null;
 }
 
 /** Where a monitor sends new items. */
@@ -3072,6 +3128,30 @@ export interface MonitorWebhook {
   events: MonitorEvent[];
   /** Deliveries in a row that failed every attempt; at 5 the monitor pauses with `webhook_failing` */
   consecutive_failures: number;
+  /** The newest delivery to this webhook; null before the first. Test events are not deliveries. */
+  last_delivery?: MonitorWebhookDelivery | null;
+}
+
+/**
+ * Where a delivery stands: `pending` waits for its first or next attempt, `delivered` got a 2xx,
+ * `failed` used every retry (after 1, 5, 30, 120 and 360 minutes).
+ */
+export type MonitorWebhookDeliveryStatus = 'pending' | 'delivered' | 'failed';
+
+/** One delivery of a monitor event to its webhook. Timestamps are ISO 8601 strings. */
+export interface MonitorWebhookDelivery {
+  event: MonitorEvent;
+  status: MonitorWebhookDeliveryStatus;
+  /** Attempts made so far */
+  attempts: number;
+  /** The endpoint's answer to the last attempt; null when there was none */
+  status_code?: number | null;
+  /** Why the last attempt failed */
+  error?: string | null;
+  created_at?: string | null;
+  /** When the next attempt is due; set only while `pending` */
+  next_attempt_at?: string | null;
+  delivered_at?: string | null;
 }
 
 /** The monitor's latest run, in short. */
@@ -3208,10 +3288,14 @@ export interface MonitorItemAuthor {
   [key: string]: unknown;
 }
 
-/** Jev's answers for an item, 0-1: `relevant`, `new_info` and one per criterion. */
+/** Jev's answers for an item, 0-1. */
 export interface MonitorItemSignals {
+  /** The item is about what the monitor watches */
   relevant?: number | null;
+  /** The item reports something new; not asked for Meta ads */
   new_info?: number | null;
+  /** The lowest answer across the monitor's criteria; only when it has criteria */
+  criteria?: number | null;
   [key: string]: unknown;
 }
 
@@ -3232,8 +3316,12 @@ export interface MonitorItem {
   /**
    * Source fields: X `likes`, `reposts`, `replies`, `views`; Reddit `subreddit`, `score`, `comments`;
    * YouTube `channel`, `views`, `thumbnail`; TikTok `views`, `likes`, `comments`, `shares`,
-   * `duration_s`, `thumbnail` (TikTok thumbnail URLs expire); web `highlights`, `domain`. An item
-   * read from a watched account also has `account`, the name it was watched as.
+   * `duration_s`, `thumbnail` (TikTok thumbnail URLs expire); Threads `likes`; Instagram `likes`,
+   * `comments`, `views`, `media_type`, `thumbnail` (these URLs expire too); Facebook `reactions`,
+   * `comments`, `shares`; Meta ads `page`, `active`, `cta`, `link`, `platforms`, `thumbnail`; web
+   * `highlights`, `domain`. An item read from a watched account also has `account`, the name it was
+   * watched as. `MonitorThreadsItemData`, `MonitorInstagramItemData`, `MonitorFacebookItemData` and
+   * `MonitorMetaAdsItemData` type the fields of those sources.
    */
   data: MonitorItemData;
 }
@@ -3243,6 +3331,49 @@ export interface MonitorItemData {
   /** The watched account the item was read from, as the monitor stores it */
   account?: string;
   [key: string]: unknown;
+}
+
+/** `data` of a Threads item (`source: 'threads'`). */
+export interface MonitorThreadsItemData extends MonitorItemData {
+  likes?: number | null;
+}
+
+/** `data` of an Instagram item (`source: 'instagram'`), always read from a watched account. */
+export interface MonitorInstagramItemData extends MonitorItemData {
+  likes?: number | null;
+  comments?: number | null;
+  /** Plays of a video or reel */
+  views?: number | null;
+  /** The post's media type as Instagram reports it */
+  media_type?: string | null;
+  /** The cover image. Instagram image URLs expire, so copy the image if you keep it. */
+  thumbnail?: string | null;
+}
+
+/** `data` of a Facebook item (`source: 'facebook'`), a post of a watched page. */
+export interface MonitorFacebookItemData extends MonitorItemData {
+  reactions?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+}
+
+/**
+ * `data` of a Meta ad (`source: 'meta_ads'`). The item's `title` is the ad headline, `url` its Meta
+ * Ad Library record and `published_at` when the ad started.
+ */
+export interface MonitorMetaAdsItemData extends MonitorItemData {
+  /** The Facebook page that runs the ad */
+  page?: string | null;
+  /** Whether the ad is still running */
+  active?: boolean | null;
+  /** The call-to-action button text */
+  cta?: string | null;
+  /** The ad's landing page */
+  link?: string | null;
+  /** Where the ad runs, as Meta names the platforms */
+  platforms?: string[];
+  /** The first image or video cover of the ad */
+  thumbnail?: string | null;
 }
 
 export interface MonitorItemList {
@@ -3260,7 +3391,7 @@ export interface MonitorEstimate {
   runs_per_month: number;
   /** `max_run_cost_usd` x `runs_per_month` */
   max_monthly_cost_usd: number;
-  /** The most each part of a run can cost, in USD */
+  /** The most each part of a run can cost, in USD: one key per source, `screening`, and `summary` with `summary: true` */
   breakdown: Record<string, number>;
 }
 

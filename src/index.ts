@@ -1410,9 +1410,10 @@ export class Desearch {
    * Search public Meta Ad Library records by keyword.
    *
    * Organic Facebook post search is not available.
+   * `sort` is `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping, which puts recently started ads first).
    * Paginated: pass `{ includeMetadata: true }` and send `metadata.nextCursor` back as `cursor` with the same target to read the next page. A cursor is opaque and valid for 24 hours.
    *
-   * @param payload - The search request including query, count (1-100), and the cursor of the previous page.
+   * @param payload - The search request including query, count (1-100), sort, and the cursor of the previous page.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata and `metadata.nextCursor`, the cursor for the next page (absent on the last page).
    * @returns An array of Facebook posts (Ad Library records), or a metadata wrapper when opted in.
    */
@@ -3272,7 +3273,8 @@ export class Desearch {
    * @param payload - The monitor: query (required), name, criteria, sources, interval, options, min_score, summary, webhook, metadata and run_now.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
    * @returns The monitor (HTTP 201). With a webhook it carries `webhook_secret`, returned only here and by `rotateMonitorWebhookSecret`.
-   * @throws Error `HTTP 402` when the balance cannot hold one run, `HTTP 409` when the account already has 25 monitors.
+   * @throws Error `HTTP 402` when the balance cannot hold one run, `HTTP 409` when the account already has 25 monitors,
+   * `HTTP 422` for an invalid field, including an `instagram` or `facebook` source without `options.instagram.accounts` or `options.facebook.pages`.
    */
   async createMonitor(
     payload: MonitorCreateRequest,
@@ -3404,6 +3406,7 @@ export class Desearch {
    * @param fields - The fields to change: query, name, criteria, sources, interval, options, min_score, summary, status, webhook and metadata.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response metadata.
    * @returns The monitor after the change, or a metadata wrapper when opted in.
+   * @throws Error `HTTP 422` for an invalid field, or when the monitor as changed has an `instagram` or `facebook` source without accounts.
    */
   async updateMonitor(
     params: MonitorParams,

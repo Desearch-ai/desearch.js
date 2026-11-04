@@ -7,9 +7,18 @@
 // accounts on every source that has them, and checks the API returns the names cleaned. It needs
 // an API with TikTok monitors and watched accounts (desearch-public-api#635); also free.
 //
+// --with-meta also creates (and deletes) a monitor with the Instagram, Facebook, Meta ads and Threads
+// sources and a webhook, and checks the cleaned names, the 422s for Instagram or Facebook without
+// accounts (create and update), the estimate breakdown, webhook.last_delivery (null on a fresh
+// monitor, and after a test event) and the items source filter. It needs an API with
+// desearch-public-api#644. No runs; the one billed call is facebookSearch with sort 'recent' and
+// count 2 (two Meta Ad Library records, about $0.004).
+//
+// X usernames are at most 15 characters: the API answers 422 for a longer one.
+//
 //   npm run build
 //   DESEARCH_API_KEY=... node scripts/e2e-monitors.mjs
-//   node scripts/e2e-monitors.mjs --base-url https://api-dev.desearch.ai --key-env DESEARCH_DEV_API_KEY [--with-accounts]
+//   node scripts/e2e-monitors.mjs --base-url https://api-dev.desearch.ai --key-env DESEARCH_DEV_API_KEY [--with-accounts] [--with-meta]
 //
 // The key is read from the environment variable named by --key-env (default DESEARCH_API_KEY), or
 // from ~/.config/desearch/e2e.env when the environment does not set it. It is never printed.
@@ -34,6 +43,7 @@ function option(name, fallback) {
 const baseUrl = option('--base-url', 'https://api.desearch.ai').replace(/\/+$/, '');
 const keyEnv = option('--key-env', 'DESEARCH_API_KEY');
 const withAccounts = process.argv.includes('--with-accounts');
+const withMeta = process.argv.includes('--with-meta');
 
 function loadEnvFile() {
   const path = join(homedir(), '.config', 'desearch', 'e2e.env');
@@ -85,6 +95,35 @@ function expect(condition, what) {
   if (!condition) throw new Error(what);
 }
 
+// A call the API should refuse with this status and a detail matching the pattern.
+async function refused(status, call, pattern) {
+  try {
+    await call();
+  } catch (error) {
+    const text = message(error);
+    if (text.startsWith(`HTTP ${status}`) && pattern.test(text)) return text;
+    throw error;
+  }
+  throw new Error(`expected HTTP ${status}`);
+}
+
+// A create the API should refuse with a 422. Deletes the monitor if the API created it anyway.
+async function createRefused(body, pattern) {
+  let monitor;
+  try {
+    monitor = await client.createMonitor(body);
+  } catch (error) {
+    const text = message(error);
+    if (text.startsWith('HTTP 422') && pattern.test(text)) return text;
+    throw error;
+  }
+  await client.deleteMonitor(monitor);
+  throw new Error(`expected HTTP 422; it created ${monitor.monitor_id} (deleted)`);
+}
+
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const detail = (text) => text.replace(/^HTTP 422: /, '').slice(0, 140);
+
 function isMonitor(value) {
   expect(value && typeof value.monitor_id === 'string', 'no monitor_id');
   expect(Array.isArray(value.sources), 'no sources');
@@ -96,23 +135,25 @@ function isMonitor(value) {
 console.log(`Base URL: ${baseUrl}`);
 
 const name = `e2e desearch.js ${new Date().toISOString()}`;
-const created = await check(
+// Each monitor is kept as soon as the API returns it, before any check on it, so the finally blocks
+// delete it even when a check fails.
+let created;
+await check(
   'createMonitor',
   async () => {
-    const monitor = isMonitor(
-      await client.createMonitor({
-        query: 'Bittensor subnet launches and updates',
-        name,
-        criteria: ['Announces a new subnet, release or partnership'],
-        sources: ['x'],
-        interval: '1d',
-        options: { x: { count: 10, lang: 'en' } },
-        min_score: 70,
-        webhook: { url: 'https://example.com/desearch-e2e' },
-        metadata: { e2e: 'desearch.js' },
-        run_now: false,
-      })
-    );
+    created = await client.createMonitor({
+      query: 'Bittensor subnet launches and updates',
+      name,
+      criteria: ['Announces a new subnet, release or partnership'],
+      sources: ['x'],
+      interval: '1d',
+      options: { x: { count: 10, lang: 'en' } },
+      min_score: 70,
+      webhook: { url: 'https://example.com/desearch-e2e' },
+      metadata: { e2e: 'desearch.js' },
+      run_now: false,
+    });
+    const monitor = isMonitor(created);
     expect(monitor.status === 'active', `status ${monitor.status}`);
     expect(monitor.last_run == null, 'run_now false still queued a run');
     expect(/^whsec_/.test(monitor.webhook_secret ?? ''), 'no whsec_ webhook_secret');
@@ -126,7 +167,7 @@ const created = await check(
   (m) => `${m.monitor_id}, max run $${m.max_run_cost_usd}`
 );
 
-if (created) {
+if (created?.monitor_id) {
   try {
     await check(
       'getMonitor',
@@ -301,28 +342,28 @@ if (withAccounts) {
     },
     (e) => `$${e.max_run_cost_usd}/run, breakdown ${JSON.stringify(e.breakdown)}`
   );
-  const watched = await check(
+  let watched;
+  await check(
     'createMonitor (tiktok + watched accounts)',
-    async () =>
-      isMonitor(
-        await client.createMonitor({
-          query: 'Product launches and model releases',
-          name: `${name} (accounts)`,
-          sources,
-          options,
-          min_score: 0,
-          run_now: false,
-        })
-      ),
+    async () => {
+      watched = await client.createMonitor({
+        query: 'Product launches and model releases',
+        name: `${name} (accounts)`,
+        sources,
+        options,
+        min_score: 0,
+        run_now: false,
+      });
+      return isMonitor(watched);
+    },
     (m) => `${m.monitor_id}, max run $${m.max_run_cost_usd}`
   );
-  if (watched) {
+  if (watched?.monitor_id) {
     try {
       await check(
         'watched accounts come back cleaned',
         async () => {
           const { options: saved } = await client.getMonitor(watched);
-          const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
           expect(same(saved.x?.accounts, ['OpenAI', 'AnthropicAI']), `x ${JSON.stringify(saved.x)}`);
           expect(same(saved.reddit?.subreddits, ['LocalLLaMA']), `reddit ${JSON.stringify(saved.reddit)}`);
           expect(same(saved.youtube?.channels, ['@OpenAI']), `youtube ${JSON.stringify(saved.youtube)}`);
@@ -346,6 +387,184 @@ if (withAccounts) {
   }
 }
 
-console.log(`${calls} calls passed, no runs triggered (free)`);
+if (withMeta) {
+  const sources = ['instagram', 'facebook', 'threads', 'meta_ads'];
+  const options = {
+    instagram: { accounts: ['@openai', 'https://www.instagram.com/nasa/?hl=en'] },
+    facebook: {
+      pages: [
+        'https://www.facebook.com/NASA/',
+        'https://www.facebook.com/profile.php?id=100064869009429',
+      ],
+    },
+    threads: { accounts: ['https://www.threads.com/@zuck', '@mosseri'] },
+    meta_ads: { count: 20 },
+  };
+  await check(
+    'estimateMonitor (instagram, facebook, threads, meta_ads)',
+    async () => {
+      const estimate = await client.estimateMonitor({ sources, options, interval: '1d' });
+      const { breakdown } = estimate;
+      // docs/monitors.md prices: an Instagram account is 12 posts and a Facebook page 10, at $0.00207
+      // per post; a Threads account is one $0.00207 request; Meta ads are $0.00207 per ad.
+      const expected = { instagram: 2 * 0.02484, facebook: 2 * 0.0207, threads: 2 * 0.00207, meta_ads: 0.0414 };
+      for (const [source, usd] of Object.entries(expected)) {
+        expect(
+          typeof breakdown?.[source] === 'number' && Math.abs(breakdown[source] - usd) < 1e-5,
+          `breakdown.${source} ${breakdown?.[source]}, expected ${usd}`
+        );
+      }
+      expect(typeof breakdown.screening === 'number', 'no breakdown.screening');
+      return estimate;
+    },
+    (e) => `$${e.max_run_cost_usd}/run, breakdown ${JSON.stringify(e.breakdown)}`
+  );
+  await check(
+    'estimateMonitor (an X username over 15 characters is a 422)',
+    () =>
+      refused(
+        422,
+        () => client.estimateMonitor({ sources: ['x'], options: { x: { accounts: ['a'.repeat(16)] } } }),
+        /X username/
+      ),
+    detail
+  );
+  await check(
+    'createMonitor (instagram without accounts is a 422)',
+    () =>
+      createRefused(
+        { query: 'Product launches', name: `${name} (refused)`, sources: ['instagram'], run_now: false },
+        /options\.instagram\.accounts/
+      ),
+    detail
+  );
+  await check(
+    'createMonitor (facebook without pages is a 422)',
+    () =>
+      createRefused(
+        {
+          query: 'Product launches',
+          name: `${name} (refused)`,
+          sources: ['facebook', 'meta_ads'],
+          options: { meta_ads: { count: 10 } },
+          run_now: false,
+        },
+        /options\.facebook\.pages/
+      ),
+    detail
+  );
+  let social;
+  await check(
+    'createMonitor (instagram, facebook, threads, meta_ads + webhook)',
+    async () => {
+      social = await client.createMonitor({
+        query: 'ChatGPT',
+        name: `${name} (meta)`,
+        sources,
+        options,
+        min_score: 0,
+        webhook: { url: 'https://example.com/desearch-e2e' },
+        run_now: false,
+      });
+      const monitor = isMonitor(social);
+      expect(monitor.last_run == null, 'run_now false still queued a run');
+      expect(monitor.webhook && 'last_delivery' in monitor.webhook, 'no webhook.last_delivery');
+      expect(monitor.webhook.last_delivery === null, `last_delivery ${JSON.stringify(monitor.webhook.last_delivery)}`);
+      return monitor;
+    },
+    (m) => `${m.monitor_id}, max run $${m.max_run_cost_usd}, last_delivery null`
+  );
+  if (social?.monitor_id) {
+    try {
+      await check(
+        'updateMonitor (options without instagram accounts is a 422)',
+        () =>
+          refused(
+            422,
+            () =>
+              client.updateMonitor(social, {
+                options: { facebook: options.facebook, threads: options.threads, meta_ads: { count: 10 } },
+              }),
+            /options\.instagram\.accounts/
+          ),
+        detail
+      );
+      await check(
+        'updateMonitor (sources with facebook, options without pages is a 422)',
+        () =>
+          refused(
+            422,
+            () =>
+              client.updateMonitor(social, {
+                sources: ['instagram', 'facebook'],
+                options: { instagram: options.instagram },
+              }),
+            /options\.facebook\.pages/
+          ),
+        detail
+      );
+      await check(
+        'new sources come back cleaned (and the refused updates changed nothing)',
+        async () => {
+          const saved = await client.getMonitor(social);
+          expect(same(saved.sources, sources), `sources ${JSON.stringify(saved.sources)}`);
+          const o = saved.options;
+          expect(same(o.instagram?.accounts, ['openai', 'nasa']), `instagram ${JSON.stringify(o.instagram)}`);
+          expect(same(o.facebook?.pages, ['NASA', '100064869009429']), `facebook ${JSON.stringify(o.facebook)}`);
+          expect(same(o.threads?.accounts, ['zuck', 'mosseri']), `threads ${JSON.stringify(o.threads)}`);
+          expect(o.meta_ads?.count === 20, `meta_ads ${JSON.stringify(o.meta_ads)}`);
+          expect(saved.webhook?.last_delivery === null, `last_delivery ${JSON.stringify(saved.webhook?.last_delivery)}`);
+          return saved;
+        },
+        () => 'openai, nasa, NASA, 100064869009429, zuck, mosseri; meta_ads.count 20'
+      );
+      await check(
+        'testMonitorWebhook leaves last_delivery null',
+        async () => {
+          const result = await client.testMonitorWebhook(social);
+          const after = await client.getMonitor(social);
+          expect(after.webhook?.last_delivery === null, `last_delivery ${JSON.stringify(after.webhook?.last_delivery)}`);
+          return result;
+        },
+        (r) => `delivered ${r.delivered}, status ${r.status_code}`
+      );
+      await check(
+        'listMonitorItems (source instagram, facebook, meta_ads)',
+        async () => {
+          for (const source of ['instagram', 'facebook', 'meta_ads']) {
+            const page = await client.listMonitorItems({ ...social, source, limit: 5 });
+            expect(Array.isArray(page.items) && page.items.length === 0, `expected no ${source} items`);
+          }
+          return true;
+        },
+        () => 'accepted, empty'
+      );
+    } finally {
+      await check(
+        'deleteMonitor (meta)',
+        async () => {
+          const result = await client.deleteMonitor(social);
+          expect(result.deleted === true, 'deleted is not true');
+          return result;
+        },
+        (r) => r.monitor_id
+      );
+    }
+  }
+  await check(
+    'facebookSearch (sort recent, count 2; billed)',
+    async () => {
+      const ads = await client.facebookSearch({ query: 'ChatGPT', count: 2, sort: 'recent' });
+      expect(Array.isArray(ads), 'not an array');
+      expect(ads.length <= 2, `${ads.length} ads for count 2`);
+      return ads;
+    },
+    (ads) => `${ads.length} ads`
+  );
+}
+
+console.log(
+  `${calls} calls passed, no runs triggered (free${withMeta ? ' but for one facebookSearch, about $0.004' : ''})`
+);
 console.log(failures === 0 ? 'OK: all calls passed' : `${failures} failed`);
 process.exitCode = failures === 0 ? 0 : 1;

@@ -14,6 +14,7 @@ import type {
   CompanyRole,
   CompanyTask,
   CompanyTaskStage,
+  CompanyTaskWarning,
   InstagramSearchResultType,
   NetworkStatsResponse,
   NetworkStatsStreamEvent,
@@ -2754,6 +2755,91 @@ describe('Company Search', () => {
     );
   });
 
+  it('sends max_cost_usd and continue_from only when given', async () => {
+    const earlier = '0c6f7f0a-4f1b-4a43-9a43-1f3f1c0e2b11';
+    const created = {
+      ...companyTask({
+        count: 50,
+        request: {
+          ...companyTask().request,
+          count: 50,
+          exclude: ['stripe.com', 'acme.de', 'beta.de'],
+          max_cost_usd: 10,
+          continue_from: earlier,
+        },
+        reserved_cost_usd: 10,
+      }),
+      cost_usd: 10,
+    };
+    mockResponse({ body: created, status: 202 });
+    mockResponse({ body: companyTask(), status: 202 });
+
+    const client = new Desearch('test-key');
+    const task = await client.companySearch({
+      query:
+        'Series A fintech startups in Berlin building payment infrastructure',
+      count: 50,
+      exclude: ['stripe.com'],
+      max_cost_usd: 10,
+      continue_from: earlier,
+    });
+    expect(task.reserved_cost_usd).toBe(10);
+    expect(task.request?.continue_from).toBe(earlier);
+    expect(JSON.parse(fetchCall(0).body!)).toEqual({
+      query:
+        'Series A fintech startups in Berlin building payment infrastructure',
+      count: 50,
+      exclude: ['stripe.com'],
+      max_cost_usd: 10,
+      continue_from: earlier,
+    });
+
+    await client.companySearch({
+      query: 'fintech startups in Berlin',
+      count: 25,
+    });
+    const body = JSON.parse(fetchCall(1).body!);
+    expect(body).toEqual({ query: 'fintech startups in Berlin', count: 25 });
+    expect('max_cost_usd' in body).toBe(false);
+    expect('continue_from' in body).toBe(false);
+  });
+
+  it('surfaces a budget below count (422) and a continue_from task that has not ended (409) as plain HTTP errors', async () => {
+    mockResponse({
+      body: '{"detail":"max_cost_usd must be at least what count reserves: 50 companies at $0.045 is $2.25."}',
+      ok: false,
+      status: 422,
+    });
+    mockResponse({
+      body: '{"detail":"The search to continue from has not ended: wait for it to finish, or cancel it."}',
+      ok: false,
+      status: 409,
+    });
+
+    const client = new Desearch('test-key');
+    await expect(
+      client.companySearch({
+        query: 'fintech startups in Berlin',
+        count: 50,
+        max_cost_usd: 1,
+      })
+    ).rejects.toThrow(
+      'HTTP 422: {"detail":"max_cost_usd must be at least what count reserves: 50 companies at $0.045 is $2.25."}'
+    );
+
+    const conflict = await client
+      .companySearch({
+        query: 'fintech startups in Berlin',
+        continue_from: COMPANY_TASK_ID,
+      })
+      .catch((error: unknown) => error);
+    expect(conflict).toBeInstanceOf(Error);
+    expect(conflict).not.toBeInstanceOf(CompanyTaskConflictError);
+    expect((conflict as Error).message).toBe(
+      'HTTP 409: {"detail":"The search to continue from has not ended: wait for it to finish, or cancel it."}'
+    );
+  });
+
   it('lists tasks with type, a comma-separated status list, limit, cursor and metadata.<key>=<value> filters', async () => {
     const list = {
       tasks: [enrichTask({ metadata: { campaign: 'q4 outbound & more' } })],
@@ -3257,12 +3343,19 @@ describe('Company Search', () => {
         // @ts-expect-error fax is not a requirement
         filters: { require: ['fax'] },
       });
+    const badBudget = () =>
+      client.companySearch({
+        query: 'fintech startups',
+        // @ts-expect-error max_cost_usd is a number of USD
+        max_cost_usd: '10',
+      });
     // @ts-expect-error type is search or enrich
     const badType = () => client.listCompanyTasks({ type: 'people' });
     const reason: CompanyCompletionReason = 'all_domains_processed';
     // @ts-expect-error domains_done is a worker stop_reason, not a completion reason
     const internal: CompanyCompletionReason = 'domains_done';
     const stage: CompanyTaskStage = 'enriching';
+    const scope: CompanyTaskWarning['code'] = 'scope_not_applied';
     const email: CompanyEmail = {
       value: 'anna@acme.com',
       // @ts-expect-error verification status is valid, invalid, risky or unknown
@@ -3271,12 +3364,14 @@ describe('Company Search', () => {
     expect([
       badRole,
       badRequirement,
+      badBudget,
       badType,
       reason,
       internal,
       stage,
+      scope,
       email,
-    ]).toHaveLength(7);
+    ]).toHaveLength(9);
     expect(mockedFetch).not.toHaveBeenCalled();
   });
 });

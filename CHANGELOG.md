@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.13.0
+
+Two optional Company Search request fields. No method changed; requests without them are sent as before.
+
+- Added `max_cost_usd` to `CompanySearchRequest`: a search budget in USD (more than 0, at most 100), at least what `count` reserves at the route price (below it the API answers 422). Without it, a search stops once it costs more than the companies it found pay for (`completion_reason` `cost_limit`, `coverage_limited: true`). With it, the whole budget is reserved and the search goes on until it delivers `count` or spends the budget. Its search effort is billed where the companies delivered do not cover it, up to the budget, even when it finds few companies or none. The unused part is returned.
+- Added `continue_from` to `CompanySearchRequest`: the `task_id` of an ended Company Search of yours. The new search leaves out every company that one excluded, delivered or held for review, so it only finds new ones. Send the same `query` and filters with the `count` still wanted. The API answers 409 while that task is running or paused and 404 when it is not your Company Search; both are plain `HTTP <status>` errors.
+- `CompanyTaskWarning.code` lists `scope_not_applied`: the query names the only companies wanted without their websites, so the search was not restricted. A query that names them with their websites ("Restrict this search to Acme (acme.com.au) and Beta (beta.co.uk). Return only those.") checks only those domains and ends `all_domains_processed`.
+- Documented `progress.effort_units` (budgeted searches only) and `progress.review` on `CompanyTask`.
+
+### Fixed
+
+- The README gave the old Company Search price. It is $45 per 1000 companies ($0.045 each) since 2026-11-02, with a minimum of 1 company when a task delivers any (was $90 per 1000 and a minimum of 2). The `companySearch` doc comment also said a minimum of 2. Company Enrich stays $50 per 1000 ($0.05 each).
+
 ## 1.12.0
 
 Covers the rest of the public API. New methods only; no existing method changed.

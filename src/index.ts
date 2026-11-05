@@ -2898,9 +2898,16 @@ export class Desearch {
    * from (`source_url`).
    *
    * Billed: `count` companies are reserved at the route price and the task settles to the companies it delivers
-   * (a minimum of 2 when it delivers any; a task that delivers none is free).
+   * (a minimum of 1 when it delivers any; a task that delivers none is free). Such a search stops once it costs more
+   * than the companies it found pay for (`completion_reason` `cost_limit`). With `max_cost_usd`, the whole budget is
+   * reserved, the search goes on until it delivers `count` or spends the budget, and its search effort is billed where
+   * the companies delivered do not cover it, up to the budget, even when it finds few or none.
    *
-   * @param payload - The search request including query, count, min_score, exclude, roles, infer_emails, verify_emails, filters (countries, require) and metadata.
+   * `continue_from` takes the `task_id` of an ended Company Search of yours: the new search leaves out every company
+   * that one excluded, delivered or held for review. While that task is running or paused the API answers 409, a plain
+   * `HTTP 409` error (not `CompanyTaskConflictError`).
+   *
+   * @param payload - The search request including query, count, min_score, exclude, roles, infer_emails, verify_emails, filters (countries, require), max_cost_usd, continue_from and metadata.
    * @param options - Optional SDK options. Set `idempotencyKey` to send an `Idempotency-Key` header, and `includeMetadata: true` to receive response cost metadata.
    * @returns The created task with the reserved cost, or a metadata wrapper when opted in.
    */

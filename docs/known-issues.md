@@ -63,7 +63,7 @@ Impact:
 - there is no typed SDK error hierarchy
 - downstream consumers must inspect error strings if they want to branch by failure type
 - the exceptions are `PeopleTaskConflictError` and `CompanyTaskConflictError`, which People Search and company pause, resume and cancel throw on HTTP 409 with the current task attached
-- other company task failures, such as 410 when results have expired, are plain `HTTP <status>: <body>` errors
+- other company task failures, such as 410 when results have expired, are plain `HTTP <status>: <body>` errors, and so is the 409 `companySearch` gets when its `continue_from` task has not ended (that body has no task)
 
 Why unresolved:
 `src/types.ts` includes API error payload interfaces, but the runtime layer does not map HTTP failures into typed error classes or structured error objects.

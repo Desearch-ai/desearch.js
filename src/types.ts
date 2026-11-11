@@ -925,7 +925,8 @@ export interface WaitForPeopleTaskOptions {
  * - `no_candidates`: its searches found nobody to check.
  * - `zero_qualified`: it checked the people its searches found and none fit.
  * - `candidate_budget`: it checked as many candidates as a search of this `count` may.
- * - `cost_limit`: what searching cost reached what its results would bill, so it stopped.
+ * - `cost_limit`: what searching cost reached what its results would bill (with `max_cost_usd`, the budget), so it
+ *   stopped. Without a budget, set `max_cost_usd` or start a search with `continue_from` to look further.
  * - `time_limit`: it ran for its maximum time.
  * - `cancelled`: it was cancelled.
  * - `failed`: an error ended it.
@@ -2324,9 +2325,18 @@ export interface CompanySearchFilters {
 
 /** Find companies from a description and collect their public contact data. */
 export interface CompanySearchRequest {
-  /** The companies you are looking for, in plain language: what they do, where, how far along (3-1000 characters). */
+  /**
+   * The companies you are looking for, in plain language: what they do, where, how far along (3-1000 characters).
+   * To check only companies you name, give their websites: "Restrict this search to Acme (acme.com.au) and Beta
+   * (beta.co.uk). Return only those." checks only those domains (`interpreted.interpretation.only_domains`) and ends
+   * `all_domains_processed`. Names without websites cannot restrict it: the search runs as usual with warning
+   * `scope_not_applied`.
+   */
   query: string;
-  /** How many companies to deliver (5-200, default 25). This many are reserved at the route price; only delivered companies are billed. */
+  /**
+   * How many companies to deliver (5-200, default 25). This many are reserved at the route price (with `max_cost_usd`,
+   * the whole budget is); only delivered companies are billed, unless a budget bills search effort.
+   */
   count?: number;
   /** Only deliver companies with at least this fit score (0-100). */
   min_score?: number | null;
@@ -2349,6 +2359,22 @@ export interface CompanySearchRequest {
   verify_emails?: boolean;
   /** Countries and contact requirements */
   filters?: CompanySearchFilters | null;
+  /**
+   * Your search budget in USD (more than 0, at most 100): the most the task may charge. It must be at least what
+   * `count` reserves at the route price; below that the API answers 422. Without it, a search stops once it costs more
+   * than the companies it found pay for (`completion_reason` `cost_limit`, `coverage_limited` true). With it, the whole
+   * budget is reserved and the search keeps going until it delivers `count` or spends the budget. Its search effort is
+   * billed where the companies delivered do not cover it, up to the budget, even when it finds few companies or none.
+   * The unused part is returned.
+   */
+  max_cost_usd?: number | null;
+  /**
+   * The `task_id` of an earlier Company Search of yours that has ended. This search leaves out every company that one
+   * excluded, delivered or held for review (`progress.review`), so it only finds new ones. Send the same `query` and
+   * filters with the `count` still wanted. The API answers 409 while that task is running or paused, and 404 when it
+   * is not your Company Search.
+   */
+  continue_from?: string | null;
   /**
    * Your own labels for this task, e.g. the workspace or campaign it belongs to.
    * At most 10 keys; keys are 1-40 characters of a-z, 0-9, '_', '.' or '-'; values are strings of at most 200 characters.
@@ -2425,12 +2451,13 @@ export interface WaitForCompanyTaskOptions {
  * Why a company task ended. `null` on the task while it is queued, running or paused.
  *
  * - `count_reached`: it delivered `count` companies.
- * - `all_domains_processed` (Company Enrich): it read every domain.
+ * - `all_domains_processed` (Company Enrich, or a search restricted to the domains its query names): it read every domain.
  * - `rounds_exhausted`: it ran every search it planned and delivered fewer than `count`.
  * - `no_candidates`: its searches found no company to check.
  * - `zero_qualified`: it checked the companies its searches found and none fit.
  * - `candidate_budget`: it checked as many candidates as a task of this `count` may.
- * - `cost_limit`: what searching cost reached what its results would bill, so it stopped.
+ * - `cost_limit`: what searching cost reached what its results would bill (with `max_cost_usd`, the budget), so it
+ *   stopped. Without a budget, set `max_cost_usd` or start a search with `continue_from` to look further.
  * - `time_limit`: it ran for its maximum time.
  * - `cancelled`: it was cancelled.
  * - `failed`: an error ended it.
@@ -2449,9 +2476,13 @@ export type CompanyCompletionReason =
 
 /** Something that made part of a company task less reliable without failing it. */
 export interface CompanyTaskWarning {
-  /** What happened, e.g. `enrichment_time_limit` */
+  /**
+   * What happened, e.g. `enrichment_time_limit`. `scope_not_applied`: the query restricts the search to companies it
+   * names without their websites, so it was not restricted.
+   */
   code:
     | 'planning_fallback'
+    | 'scope_not_applied'
     | 'ai_scoring_unavailable'
     | 'enrichment_time_limit'
     | 'linkedin_verification_unavailable'
@@ -2481,19 +2512,25 @@ export interface CompanyTask {
   result_count: number;
   /**
    * The normalized request. Company Search: `query`, `count`, `min_score`, `exclude`, `roles`, `infer_emails`,
-   * `verify_emails`, `filters`. Company Enrich: `domains`, `roles`, `infer_emails`, `verify_emails`.
+   * `verify_emails`, `filters`, and `max_cost_usd` and `continue_from` when they were sent (a continued search's
+   * `exclude` also has the earlier search's companies). Company Enrich: `domains`, `roles`, `infer_emails`,
+   * `verify_emails`.
    */
   request?: Record<string, unknown> | null;
   /** The `metadata` sent when the task was created (`{}` when none) */
   metadata: Record<string, string>;
-  /** Company Search: how the description was understood (criteria and the queries it ran) */
+  /**
+   * Company Search: how the description was understood (criteria and the queries it ran). A query restricted to the
+   * companies it names lists their domains in `interpretation.only_domains`.
+   */
   interpreted?: Record<string, unknown> | null;
   /**
    * Counters while the task runs: `candidates_found`, `candidates_processed`, `qualified`, `filtered` (companies
    * left out, by reason: `unreachable`, `not_a_company`, `below_min_score`, `no_<requirement>`), `enrichment`
    * (`published`, `complete`, `pending`, `failed`), `email_checks` (`checked`, `valid`, `invalid`, `risky`,
-   * `unknown`) and `stop_reason`, the worker's internal reason for stopping. Prefer `completion_reason` and
-   * `coverage_limited`.
+   * `unknown`), `review` (companies held for review: not delivered, not billed), `effort_units` (searches with
+   * `max_cost_usd` only: the search effort billed where the companies delivered do not cover it) and `stop_reason`,
+   * the worker's internal reason for stopping. Prefer `completion_reason` and `coverage_limited`.
    */
   progress: Record<string, unknown>;
   /** Errors the task ran into */
@@ -2503,7 +2540,7 @@ export interface CompanyTask {
   /**
    * True when a budget (`completion_reason` `cost_limit`, `candidate_budget` or `time_limit`) stopped the task
    * before it reached `count`: there may be more matching companies than it returned. `status` is still
-   * `completed` in that case.
+   * `completed` in that case. To look further, start a search with `continue_from` set to this task's ID.
    */
   coverage_limited?: boolean;
   /** What made part of the task less reliable without failing it (`[]` when nothing did) */

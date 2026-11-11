@@ -279,7 +279,7 @@ Two helpers build on these methods without changing the transport:
 ### Company Search methods
 
 Company Search and Company Enrich run on the People Search engine as background tasks, under their own routes:
-- `companySearch` (`POST /desearch/companies/search`) and `companyEnrich` (`POST /desearch/companies/enrich`) POST a JSON body and return the created task (HTTP 202; 200 when an `Idempotency-Key` replays an earlier task). These are the only billed company calls.
+- `companySearch` (`POST /desearch/companies/search`) and `companyEnrich` (`POST /desearch/companies/enrich`) POST a JSON body and return the created task (HTTP 202; 200 when an `Idempotency-Key` replays an earlier task). These are the only billed company calls. The body is sent as given, so optional fields such as `max_cost_usd` and `continue_from` are sent only when the caller sets them.
 - `listCompanyTasks`, `getCompanyTask`, `getCompanyResults` and `exportCompanyResults` are free GET calls under `/desearch/companies/tasks`.
 - `pauseCompanyTask`, `resumeCompanyTask` and `cancelCompanyTask` are free POST calls with no body.
 

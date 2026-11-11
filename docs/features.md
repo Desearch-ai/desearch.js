@@ -110,7 +110,7 @@ Status legend:
 | `exportPeopleProfiles` | `GET /desearch/people/profiles/export` | ✅ | Free. CSV or JSON Lines text; accepts result filters. |
 | `waitForPeopleTask` | polls `GET /desearch/people/tasks/{task_id}` | ✅ | SDK helper. Resolves when the task ends; throws on timeout. |
 | `iterPeopleResultPages` | pages `GET /desearch/people/tasks/{task_id}/results` | ✅ | SDK helper. Async iterator over results pages. |
-| `companySearch` | `POST /desearch/companies/search` | ✅ | Billed. Starts a Company Search task (HTTP 202). |
+| `companySearch` | `POST /desearch/companies/search` | ✅ | Billed. Starts a Company Search task (HTTP 202). Optional search budget (`max_cost_usd`) and `continue_from`. |
 | `companyEnrich` | `POST /desearch/companies/enrich` | ✅ | Billed. Starts a Company Enrich task for up to 200 domains. |
 | `listCompanyTasks` | `GET /desearch/companies/tasks` | ✅ | Free. `type` (`search`, `enrich`); `status` arrays are sent comma-separated; `metadata` pairs are sent as `metadata.<key>=<value>`; cursor pagination. |
 | `getCompanyTask` | `GET /desearch/companies/tasks/{task_id}` | ✅ | Free. Status, stage (including `enriching`), progress and cost of one task. |
@@ -183,7 +183,7 @@ Status legend:
 
 ### Company Search request types
 
-- ✅ `CompanySearchRequest` (`query`, `count`, `min_score`, `exclude`, `roles`, `infer_emails`, `verify_emails`, `filters`, `metadata`), `CompanySearchFilters` (`countries`, `require`)
+- ✅ `CompanySearchRequest` (`query`, `count`, `min_score`, `exclude`, `roles`, `infer_emails`, `verify_emails`, `filters`, `max_cost_usd`, `continue_from`, `metadata`), `CompanySearchFilters` (`countries`, `require`)
 - ✅ `CompanyEnrichRequest` (`domains`, `roles`, `infer_emails`, `verify_emails`, `metadata`)
 - ✅ `CompanyRole`, `CompanyRequirement`, `CompanyTaskType`
 - ✅ `CompanyTaskParams`, `ListCompanyTasksParams`, `GetCompanyResultsParams`, `ExportCompanyResultsParams`, `WaitForCompanyTaskOptions`

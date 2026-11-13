@@ -114,7 +114,7 @@ All requests include:
 
 The exception is the network stats routes, which need no API key: `networkStats`, `networkStatsHistory` and `streamNetworkStats` send no `Authorization` header (the internal `omitApiKey` request setting).
 
-For POST requests with a payload, the helper also adds:
+For POST and PATCH requests with a payload, the helper also adds:
 
 ```ts
 { 'Content-Type': 'application/json' }
@@ -133,9 +133,9 @@ Behavior in the current code:
 
 That repeated-key encoding is especially important for `xPostsByUrls`, which sends multiple `urls` values on a GET route.
 
-### 4. POST serialization
+### 4. POST and PATCH serialization
 
-For POST requests, payloads are sent with:
+For POST and PATCH requests, payloads are sent with:
 - `JSON.stringify(payload)`
 - `Content-Type: application/json`
 
@@ -294,6 +294,21 @@ Two helpers build on these methods:
 - `iterCompanyResults` is an async generator over the companies themselves, not pages. It calls `getCompanyResults` and follows `next_cursor` until `has_more` is false or a page has no new companies. Unlike `iterPeopleResultPages` it does not hand out the cursor; callers that keep `next_cursor` to read only new companies later call `getCompanyResults` themselves.
 
 Types reuse the People Search ones where the API does: task statuses (`PeopleTaskStatus`), links, `created_by`, the export format, the create options (`PeopleSearchOptions`) and the criteria checks of `CompanyScore` (`PeopleCriterionCheck`). The result interfaces (`Company` and its nested objects) have an index signature, like `PersonMetrics` and `PersonAttributes`, because the API allows a newer worker to add fields.
+
+### Monitors methods
+
+A monitor is a search that runs on a schedule and keeps only what is new. The API runs and bills the runs; the SDK only manages monitors and reads what they found:
+- `createMonitor` (`POST /desearch/monitors`, HTTP 201) and `estimateMonitor` (`POST /desearch/monitors/estimate`) POST a JSON body. Neither is billed; each run is.
+- `listMonitors`, `getMonitor`, `listMonitorRuns`, `getMonitorRun` and `listMonitorItems` are free GET calls. `status` arrays are joined with commas, like the task lists.
+- `updateMonitor` is the only PATCH call. It sends only the fields given, so `webhook: null` reaches the API and removes the webhook.
+- `deleteMonitor` is the only DELETE call.
+- `triggerMonitor`, `testMonitorWebhook` and `rotateMonitorWebhookSecret` are POST calls with no body.
+
+`monitor_id` and `run_id` are URL-encoded into the path. Methods take `{ monitor_id }` (and `run_id`), so a monitor or run object works as is; the list methods read only `limit`, `cursor` and `source` from it, and `updateMonitor` takes the fields to change as a separate argument. Errors keep the plain `HTTP <status>: <body>` format: the API's 409s here (`too_many_monitors`, `run_in_progress`) carry no object to attach, unlike the task 409s.
+
+`iterMonitorItems` is an async generator over items, newest first. It follows `next_cursor` until it is null or a page is empty.
+
+`verifyWebhookSignature` (`src/webhooks.ts`) uses no network. It parses `t=<unix>,v1=<hex>` from the `Desearch-Signature` header, rejects a timestamp more than `toleranceSeconds` (default 300) from now in either direction, computes HMAC-SHA256 of `<t>.<raw body>` with `node:crypto` keyed with the `whsec_...` secret as given, and compares it with `timingSafeEqual`. Any of several `v1` entries may match.
 
 ## Type-system design
 

@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.11.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.14.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -25,12 +25,13 @@ What it covers today:
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 - Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
+- Monitors: searches over web, X, Reddit, YouTube, Threads, TikTok and the Meta Ad Library, or watched accounts (Instagram and Facebook pages too), that run on a schedule and keep only what is new, with a webhook signature check
 - public network stats, including a live Server-Sent Events stream
 
 What it does not try to be:
 - a browser-first SDK
 - a configurable transport layer
-- a general write or mutation client (People Search and company tasks are the only things it creates or changes)
+- a general write or mutation client (People Search tasks, company tasks and monitors are the only things it creates or changes)
 - a framework with retries or runtime validation (People Search and Company Search add small polling helpers and result iterators)
 
 ## Quick Start
@@ -211,6 +212,25 @@ See [People Search](#people-search) for the full flow.
 
 See [Company Search and Company Enrich](#company-search-and-company-enrich) for the full flow.
 
+### Monitors methods
+
+- `createMonitor(payload)` → `POST /desearch/monitors`
+- `estimateMonitor(payload?)` → `POST /desearch/monitors/estimate`
+- `listMonitors(params?)` → `GET /desearch/monitors`
+- `getMonitor(params)` → `GET /desearch/monitors/{monitor_id}`
+- `updateMonitor(params, fields)` → `PATCH /desearch/monitors/{monitor_id}`
+- `deleteMonitor(params)` → `DELETE /desearch/monitors/{monitor_id}`
+- `triggerMonitor(params)` → `POST /desearch/monitors/{monitor_id}/trigger` (queues a billed run)
+- `listMonitorRuns(params)` → `GET /desearch/monitors/{monitor_id}/runs`
+- `getMonitorRun(params)` → `GET /desearch/monitors/{monitor_id}/runs/{run_id}`
+- `listMonitorItems(params)` → `GET /desearch/monitors/{monitor_id}/items`
+- `testMonitorWebhook(params)` → `POST /desearch/monitors/{monitor_id}/webhook/test`
+- `rotateMonitorWebhookSecret(params)` → `POST /desearch/monitors/{monitor_id}/webhook/rotate-secret`
+- `iterMonitorItems(params)` is an async iterator over the items of `listMonitorItems` pages
+- `verifyWebhookSignature(secret, header, body, options?)` checks a webhook delivery (no request)
+
+See [Monitors](#monitors) for the full flow.
+
 ## Usage examples
 
 ### AI search
@@ -333,7 +353,7 @@ const profile = await client.tiktokProfile({ username: 'tiktok' });
 const comments = await client.tiktokComments({ video_id: posts[0].id!, count: 20 });
 const trending = await client.tiktokTrending({ region: 'US', count: 10 });
 
-const ads = await client.facebookSearch({ query: 'running shoes' });
+const ads = await client.facebookSearch({ query: 'running shoes', sort: 'recent' });
 const page = await client.facebookProfile({ profile_id: 'facebook' });
 const pagePosts = await client.facebookProfilePosts({ profile_id: 'facebook' });
 const post = await client.facebookPostById({ id: 'Meta/posts/1040495851972958' });
@@ -349,6 +369,7 @@ Notes:
 - The SDK URL-encodes path parameters. An ID or post URL that contains `/`, such as `Meta/posts/1040495851972958`, works on the post, media and comments routes.
 - A TikTok post `id` works with `tiktokComments` and `tiktokPostById`. `instagramComments` takes the post shortcode (the code in the post URL); numeric media IDs return 404.
 - Facebook search and hashtag read the public Meta Ad Library. Organic Facebook post search is not available.
+- `facebookSearch` takes `sort`: `impressions` (the default: most seen first) or `recent` (Meta's monthly relevance grouping, which puts recently started ads first).
 - Fields the provider does not send are left out of each object, so every field of `TikTokPost`, `FacebookPost`, `InstagramMedia` and the other social types is optional.
 
 ### YouTube, Reddit and Threads
@@ -891,6 +912,181 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 
 `exportCompanyResults({ task_id, format })` returns text. `format` is `csv` (the default) or `jsonl`. CSV has one row per company: its domain, name, fit score, location, primary email, emails, phones and social profiles, then the CEO (or managing director), founder, CTO and CFO with their title, email, email status and LinkedIn profile, and `fully_verified`, `unverified_criteria` and `enrichment_status`. JSON Lines has one company per line with every field. Fields the later stages have not filled in yet are empty.
 
+## Monitors
+
+A monitor is a search that runs on a schedule (`1h`, `3h`, `6h`, `12h`, `1d` or `7d`) and keeps only what is new since its last run. Each run searches its `sources` (`web`, `x`, `reddit`, `youtube`, `threads`, `tiktok`, `instagram`, `facebook`, `meta_ads`) from where the previous run ended, drops everything the monitor has already seen, and screens the rest with an AI classifier: is the item about what the monitor watches (`relevant`), does it report something new (`new_info`), and one question per criterion. An item's `score` is the lowest of `relevant` and the criteria × 100, and it is kept at `min_score` (default 60). `item.signals` holds the answers (0-1): `relevant`, `new_info` and, when the monitor has criteria, `criteria`, the lowest answer across them. Kept items go to your webhook and stay readable through the API.
+
+### End-to-end example
+
+```ts
+import Desearch from 'desearch-js';
+
+const client = new Desearch(process.env.DESEARCH_API_KEY!);
+
+// What it can cost before you create it (free).
+const estimate = await client.estimateMonitor({ sources: ['web', 'x', 'reddit'], interval: '1d' });
+console.log(estimate.max_run_cost_usd, estimate.max_monthly_cost_usd);
+
+// 1. Create it. The first run is queued at once (run_now defaults to true).
+const monitor = await client.createMonitor({
+  query: 'Bittensor subnet launches and updates',
+  name: 'Bittensor subnet news',
+  criteria: ['Announces a new subnet, release or partnership'],
+  sources: ['web', 'x', 'reddit'],
+  interval: '1d',
+  options: { x: { count: 20, lang: 'en' }, web: { count: 10 } },
+  min_score: 60,
+  webhook: { url: 'https://example.com/hooks/desearch' },
+  metadata: { team: 'growth' },
+});
+// Returned only here and by rotateMonitorWebhookSecret: store it.
+const secret = monitor.webhook_secret!;
+
+// 2. Read what it found, newest first.
+for await (const item of client.iterMonitorItems({ monitor_id: monitor.monitor_id, source: 'x' })) {
+  console.log(item.score, item.url, item.text?.slice(0, 80));
+}
+
+// 3. Runs: what each source returned, how many items were new and kept, and the cost.
+const { runs } = await client.listMonitorRuns({ monitor_id: monitor.monitor_id, limit: 5 });
+const run = await client.getMonitorRun(runs[0]); // the run with its items, most relevant first
+
+// 4. Change it, pause it, run it now, delete it.
+await client.updateMonitor(monitor, { min_score: 70, status: 'paused' });
+await client.triggerMonitor(monitor); // a paused monitor can still run by hand
+await client.deleteMonitor(monitor);
+```
+
+`createMonitor` takes `query` (3-500 characters; the only required field), `name`, `criteria` (up to 5, each at most 300 characters), `sources` (default `['web', 'x']`), `interval` (default `1d`), `options`, `min_score` (0-100, default 60), `summary` (default false), `webhook` (`{ url, events }`), `metadata` (up to 20 string keys) and `run_now` (default true):
+
+- `options.web.count` is 10, 15 or 20; `options.x` takes `count` (1-100, default 20), `lang`, `min_likes` and `accounts`; `options.tiktok` takes `count` (10, 20 or 30, default 10), `accounts` and `hashtags`; `options.reddit` takes `subreddits`, `options.youtube` takes `channels` and `options.threads` takes `accounts`; `options.instagram` takes `accounts` and `hashtags` (one of them is required with that source) and `options.facebook.pages` is required with `facebook`; `options.meta_ads.count` is 10, 20 or 30 (default 10).
+- `summary: true` adds a short LLM digest of the items each run keeps (`run.summary`).
+- `webhook.events` is any of `monitor.items.found` (a run kept at least one item), `monitor.run.completed` and `monitor.run.failed`. The default is `['monitor.items.found', 'monitor.run.failed']`. The URL must be HTTPS on a public address; redirects are not followed.
+
+### Watched accounts
+
+A source can watch up to 10 accounts instead of searching: `options.x.accounts` (X usernames), `options.reddit.subreddits`, `options.youtube.channels`, `options.tiktok.accounts` and `options.threads.accounts`. Instagram (`options.instagram.accounts`, or hashtags) and Facebook (`options.facebook.pages`) only watch accounts, as neither has a keyword search for posts: a monitor with either source needs at least one. Each run then reads every account's newest posts, and the query and criteria still decide what is kept, like search results. Both stay required; `min_score: 0` keeps every new post.
+
+```ts
+const watched = await client.createMonitor({
+  query: 'Product launches and model releases',
+  sources: ['x', 'reddit', 'youtube', 'tiktok'],
+  options: {
+    x: { accounts: ['@OpenAI', 'https://x.com/AnthropicAI'], lang: 'en' },
+    reddit: { subreddits: ['r/LocalLLaMA'] },
+    youtube: { channels: ['@OpenAI', 'UCXZCJLdBC09xxGZ6gcdrc6A'] },
+    tiktok: { accounts: ['@openai'], count: 10 },
+  },
+  min_score: 0,
+});
+console.log(watched.options.x?.accounts); // ['OpenAI', 'AnthropicAI']
+
+const social = await client.createMonitor({
+  query: 'Product launches and campaigns',
+  sources: ['instagram', 'facebook', 'threads'],
+  options: {
+    instagram: { accounts: ['@openai', 'https://www.instagram.com/nasa/'] },
+    facebook: { pages: ['https://www.facebook.com/NASA/', '100064869009429'] },
+    threads: { accounts: ['https://www.threads.com/@zuck'] },
+  },
+  min_score: 0,
+});
+console.log(social.options.facebook?.pages); // ['NASA', '100064869009429']
+```
+
+- Send names the way people paste them: `OpenAI`, `@OpenAI` or a profile URL for X (at most 15 characters); `LocalLLaMA`, `r/LocalLLaMA` or a URL for Reddit; `@handle`, a `UC...` channel ID or a channel URL for YouTube; `openai`, `@openai` or a profile URL for TikTok, Instagram and Threads; a page name, a numeric page ID or a page URL for Facebook (`profile.php?id=...` and `/pages/Name/123...` URLs give the ID). The API cleans them and returns them that way (`OpenAI`, `LocalLLaMA`, `@OpenAI` or `UC...`, `openai`, `NASA` or `100064869009429`); the SDK sends them as given. An invalid name, or more than 10 on one source, is an `HTTP 422` error, and so is an `instagram` or `facebook` source without accounts, on create and on update (`updateMonitor` checks the monitor as changed).
+- With `x.accounts`, X reads each account's timeline (20 posts), so `x.count` is not used; `x.lang` and `x.min_likes` still filter. With `tiktok.accounts`, `tiktok.count` is the posts read per account. Instagram reads up to 12 posts per account and Facebook up to 10 per page.
+- An item read from a watched account has `data.account`, the name it was watched as. An account that cannot be read (unknown or private) is listed in the run's `stats.sources.<source>.accounts_failed`; the source fails only when all of its accounts do.
+- TikTok items have `data.views`, `likes`, `comments`, `shares`, `saves` and `duration_s`; Threads items `likes`; Instagram items `likes`, `comments`, `views` and `media_type`; Facebook items `reactions`, `comments`, `shares` and `views`. `MonitorTikTokItemData`, `MonitorThreadsItemData`, `MonitorInstagramItemData` and `MonitorFacebookItemData` type them.
+- TikTok, Instagram and Facebook items also have `data.post_id` (the ID `GET /desearch/social/post` gives the same post; an Instagram shortcode), `type` (`video`, `image`, `carousel`, `reel`, ...), `hashtags`, `mentions` (TikTok and Instagram), `media` (links to the post's videos and pictures) and `thumbnail` (`MonitorSocialPostItemData`). Media and thumbnail links expire after a few days, so copy what you keep. The metrics are the post's when the run found it; `GET /desearch/social/post?url=<link>` reads them again, and `author=true` adds the author's followers.
+- TikTok search has no working date filter and ranks by relevance, so a TikTok keyword monitor finds a new video only when it reaches TikTok's top results. To follow creators, watch their accounts (`options.tiktok.accounts`). Threads keyword search returns loosely matched posts, so accounts work better there too.
+
+### Watched hashtags
+
+TikTok and Instagram can also watch up to 10 hashtags each: `options.tiktok.hashtags` and `options.instagram.hashtags`, in any script (`skincare`, `#სილამაზე`, or a tag URL such as `https://www.tiktok.com/tag/skincare` or `https://www.instagram.com/explore/tags/skincare/`). A hashtag feed lists popular as well as recent posts from any account, so a monitor finds posts outside the accounts it watches; the window drops the old ones and the monitor's seen items the rest. With accounts or hashtags, a source reads those feeds instead of searching by keyword, and Instagram needs one of them. Facebook has no organic hashtag feed; for ads by keyword, use `meta_ads`.
+
+```ts
+import type { MonitorTikTokItemData } from 'desearch-js';
+
+const tags = await client.createMonitor({
+  query: 'Posts about our skincare brand',
+  sources: ['tiktok', 'instagram'],
+  options: {
+    tiktok: { count: 10, hashtags: ['#სილამაზე', 'https://www.tiktok.com/tag/skincare'] },
+    instagram: { hashtags: ['skincare', 'სილამაზე'] }, // no accounts needed
+  },
+  min_score: 0,
+});
+console.log(tags.options.tiktok?.hashtags); // ['სილამაზე', 'skincare']
+
+for await (const item of client.iterMonitorItems({ monitor_id: tags.monitor_id, source: 'tiktok' })) {
+  const data = item.data as MonitorTikTokItemData;
+  console.log(data.hashtag, data.post_id, data.views, item.url);
+}
+```
+
+- The API returns hashtags without `#` (a tag URL becomes its tag) and answers `HTTP 422` for an invalid hashtag or more than 10 on one source.
+- Each run reads `tiktok.count` posts per TikTok hashtag and up to 12 per Instagram hashtag. A hashtag is billed as one read, whatever the number of posts (see Pricing).
+- An item read from a hashtag has `data.hashtag`. A hashtag that cannot be read is listed in the run's `stats.sources.<source>.hashtags_failed`; the source fails only when all of its accounts and hashtags do.
+
+### Meta ads
+
+The `meta_ads` source searches the Meta Ad Library by keyword and reads `options.meta_ads.count` ads per run (10, 20 or 30, default 10). The Ad Library matches keywords, so the query should be a brand, product or short phrase (`ChatGPT`); a sentence finds nothing. It has no date filter: an ad is new the first time a run sees it, if it started within the last 30 days. Ads are screened with their own question (is the ad about what the monitor watches) and get no `new_info`.
+
+```ts
+import type { MonitorMetaAdsItemData } from 'desearch-js';
+
+const ads = await client.createMonitor({
+  query: 'ChatGPT',
+  sources: ['meta_ads'],
+  options: { meta_ads: { count: 20 } },
+});
+for await (const ad of client.iterMonitorItems({ monitor_id: ads.monitor_id, source: 'meta_ads' })) {
+  const data = ad.data as MonitorMetaAdsItemData;
+  console.log(ad.title, data.page, data.link, ad.url); // headline, page, landing page, Ad Library record
+}
+```
+
+A Meta ad item has the ad headline as `title`, its Ad Library record as `url` and when the ad started as `published_at`; `data` has `page`, `active`, `cta`, `link` (the landing page), `platforms` and `thumbnail` (`MonitorMetaAdsItemData`).
+
+`updateMonitor(monitor, fields)` takes the same fields, all optional, plus `status`. `status: 'paused'` stops scheduled runs; `status: 'active'` resumes them, also after the API paused the monitor itself (`paused_reason` `insufficient_credits` or `webhook_failing`). `webhook: null` removes the webhook.
+
+### Webhooks
+
+Each delivery is a POST with the event in `Desearch-Event`, the delivery ID in `Desearch-Delivery` and a signature in `Desearch-Signature`: `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, keyed with the monitor's `webhook_secret`. Verify it against the raw body before you parse it:
+
+```ts
+import express from 'express';
+import { verifyWebhookSignature, WEBHOOK_SIGNATURE_HEADER, type MonitorWebhookEvent } from 'desearch-js';
+
+const app = express();
+
+app.post('/hooks/desearch', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verifyWebhookSignature(process.env.DESEARCH_WEBHOOK_SECRET!, req.get(WEBHOOK_SIGNATURE_HEADER), req.body)) {
+    return res.status(400).end();
+  }
+  const event = JSON.parse(req.body.toString('utf8')) as MonitorWebhookEvent;
+  if (event.type === 'monitor.items.found') {
+    for (const item of event.items) console.log(item.source, item.score, item.url);
+  }
+  res.status(204).end(); // answer 2xx within 10 seconds
+});
+```
+
+`verifyWebhookSignature` returns false for a missing or malformed header, a wrong signature, or a timestamp more than 5 minutes from now (`toleranceSeconds` changes that). It compares in constant time and throws a `TypeError` when given a parsed object instead of the raw body. A delivery without a 2xx within 10 seconds is retried after 1, 5, 30, 120 and 360 minutes; after 5 deliveries in a row fail every attempt, the monitor pauses with `paused_reason: 'webhook_failing'`.
+
+`monitor.webhook.last_delivery` is the newest delivery, null before the first: `status` is `pending` while it waits for its first or next attempt (`next_attempt_at`, with the last answer in `status_code` and `error`), `delivered`, or `failed` after every retry, with `event`, `attempts`, `created_at` and `delivered_at`.
+
+`testMonitorWebhook(monitor)` sends a signed `monitor.test` event with one sample item and returns what your endpoint answered (`delivered`, `status_code`, `error`, `duration_ms`). A test is not a delivery: `last_delivery` stays as it was. `rotateMonitorWebhookSecret(monitor)` returns a new secret once; deliveries from then on are signed with it.
+
+### Pricing
+
+Creating, reading, changing and deleting monitors is free. Each run pays for what it uses: its searches at their list price (the same as calling those endpoints yourself), AI screening per item screened, and with `summary` the LLM usage plus 50%. A run with no new items still pays for its searches. TikTok, Instagram, Facebook and Meta ads are billed per read, $3.00 per 1,000 reads ($0.003 a read), whatever the number of posts a read returns: one read per watched account, hashtag or Facebook page, one per TikTok keyword search, and one per Ad Library page (`meta_ads`, whatever `meta_ads.count`). A read that returns nothing is free, except an empty or private TikTok account, which takes two reads, so a run's hold counts two reads per TikTok account. The other sources pay their feed's list price: an X account is about $0.003 (a 20-post timeline), and a subreddit, a YouTube channel or a Threads account $0.00207 each. `estimateMonitor` includes them in its `breakdown`. When a run is queued, `max_run_cost_usd` is held on the balance; when it ends it is billed what it used (never more) and the rest is released. A run that cannot be held fails with `insufficient_credits` and the monitor pauses until you resume it.
+
+### Errors
+
+Monitors use the standard `HTTP <status>: <body>` errors: 422 for an invalid body (including a bad account name or hashtag, more than 10 accounts or hashtags on a source, an `instagram` source without accounts or hashtags, or a `facebook` source without pages), 402 when the balance cannot hold one run (create, even with `run_now: false`, and trigger), 404 for an unknown monitor or run, 409 when the account already has 25 monitors (create) or a run is already queued or running (trigger), and 400 for a webhook URL that is not public HTTPS, an invalid cursor or `source` filter, or a webhook test or secret rotation on a monitor without a webhook.
+
 ## Tech stack
 
 - TypeScript `^5.9.3`
@@ -917,6 +1113,7 @@ Cancelling bills only the companies delivered so far. A task cancelled before it
 | `npm run publish:stable` | Version, build, and publish as the default release |
 | `npm run prepublishOnly` | Automatic npm hook that runs `npm run build` before publish |
 | `node scripts/e2e-youtube-reddit-threads.mjs [--base-url URL] [--key-env NAME]` | Live smoke test of the 16 YouTube, Reddit and Threads methods, with page 2 of each paginated one (billed, about $0.05; run `npm run build` first). Reads the key from `DESEARCH_API_KEY`, or the variable `--key-env` names, or `~/.config/desearch/e2e.env`. |
+| `node scripts/e2e-monitors.mjs [--base-url URL] [--key-env NAME] [--with-accounts] [--with-meta]` | Live smoke test of the Monitors methods (free: it creates one monitor with `run_now: false`, never triggers a run, and deletes it; run `npm run build` first). `--with-accounts` adds a second monitor with the TikTok source and watched accounts and checks the cleaned names. `--with-meta` adds one with the Instagram, Facebook, Meta ads and Threads sources and a webhook, and checks the cleaned names, the 422s for Instagram and Facebook without accounts, the estimate breakdown, `webhook.last_delivery` and the `meta_ads` items filter; it also makes one billed `facebookSearch` call with `sort: 'recent'` (2 ads, about $0.004). Same key lookup as above. |
 | `DESEARCH_API_KEY=... node scripts/e2e-full-coverage.mjs` | Live smoke test of the TikTok, Facebook, Instagram, Search API and network stats methods against the production API (billed; run `npm run build` first). Prints `PASS` / `FAIL` per call. It starts a People Search task only with `--with-people`. |
 
 ## Architecture overview
@@ -930,7 +1127,7 @@ Source layout:
 Key design decisions in the current source:
 - one shared request helper powers every public method
 - GET payloads are serialized through `URLSearchParams`
-- POST payloads are serialized as JSON
+- POST and PATCH payloads are serialized as JSON
 - response parsing switches between JSON and text based on `content-type`
 - default calls return the parsed payload directly, preserving the existing SDK response shape
 - callers can opt into `{ data, metadata }` wrappers with `{ includeMetadata: true }`
@@ -938,7 +1135,7 @@ Key design decisions in the current source:
 - the base URL is fixed to `https://api.desearch.ai`
 - `aiSearch()` forcibly disables streaming
 - People Search and company methods put `task_id` in the path, join array query parameters (`has`, `status`) with commas, and send `Idempotency-Key` only when you pass `idempotencyKey`
-- path parameters (`task_id`, social IDs, usernames, tags) are URL-encoded
+- path parameters (`task_id`, `monitor_id`, `run_id`, social IDs, usernames, tags) are URL-encoded
 - the network stats methods send no `Authorization` header; `streamNetworkStats()` reads the Server-Sent Events body incrementally instead of buffering it
 
 See [docs/architecture.md](./docs/architecture.md) for the detailed flow and [ADR 0001](./docs/decisions/0001-thin-node-sdk-transport.md) for the reasoning behind the current transport design.

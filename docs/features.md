@@ -29,6 +29,8 @@ Status legend:
 | People Search idempotent creates | ✅ | `src/index.ts` `peopleSearch` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
 | Company Search polling and iteration helpers | ✅ | `src/index.ts` `waitForCompanyTask`, `iterCompanyResults` | Polls a task with an interval and timeout; iterates companies by `next_cursor`. No AbortSignal. |
 | Company Search idempotent creates | ✅ | `src/index.ts` `companySearch`, `companyEnrich` | `idempotencyKey` is sent as the `Idempotency-Key` header. |
+| Monitors item iteration | ✅ | `src/index.ts` `iterMonitorItems` | Iterates a monitor's items, newest first, by `next_cursor`. |
+| Monitors webhook signature check | ✅ | `src/webhooks.ts` `verifyWebhookSignature` | HMAC-SHA256 of `<t>.<raw body>`, 5-minute tolerance, constant-time compare. |
 | Streaming AI responses | ❌ | `aiSearch` forces `streaming: false` | The SDK does not surface streamed results. |
 | Streaming network stats (Server-Sent Events) | ✅ | `src/index.ts` `streamNetworkStats`, `SseParser` | Async iterator over `stats` events; `lastEventId` replays missed snapshots, `signal` stops it. No automatic reconnect. |
 | Social cursor pagination | ✅ | `src/index.ts` `parseResponseMetadata` | `x-desearch-next-cursor` is returned as `metadata.nextCursor` with `{ includeMetadata: true }`; social, YouTube and Reddit list methods take `cursor`. |
@@ -62,7 +64,7 @@ Status legend:
 | `tiktokComments` | `GET /desearch/tiktok/comments/{video_id}` | ✅ | Paginated. |
 | `tiktokHashtag` | `GET /desearch/tiktok/hashtag/{tag}` | ✅ | Paginated. |
 | `tiktokTrending` | `GET /desearch/tiktok/trending` | ✅ | One page per region; no cursor. |
-| `facebookSearch` | `POST /desearch/facebook/search` | ✅ | Meta Ad Library; paginated, `cursor` in the body. |
+| `facebookSearch` | `POST /desearch/facebook/search` | ✅ | Meta Ad Library; paginated, `cursor` in the body; optional `sort` (`impressions`, `recent`). |
 | `facebookPostById` | `GET /desearch/facebook/post/{id}` | ✅ | IDs containing `/` work. |
 | `facebookProfile` | `GET /desearch/facebook/profile/{profile_id}` | ✅ | Profile or page. |
 | `facebookProfilePosts` | `GET /desearch/facebook/profile/{profile_id}/posts` | ✅ | Paginated. |
@@ -119,6 +121,20 @@ Status legend:
 | `exportCompanyResults` | `GET /desearch/companies/tasks/{task_id}/export` | ✅ | Free. CSV (default) or JSON Lines text. |
 | `waitForCompanyTask` | polls `GET /desearch/companies/tasks/{task_id}` | ✅ | SDK helper. Resolves when the task ends; throws on timeout. |
 | `iterCompanyResults` | pages `GET /desearch/companies/tasks/{task_id}/results` | ✅ | SDK helper. Async iterator over the companies, page by page. |
+| `createMonitor` | `POST /desearch/monitors` | ✅ | Free; each run is billed. Returns `webhook_secret` once when a webhook is set (HTTP 201). |
+| `estimateMonitor` | `POST /desearch/monitors/estimate` | ✅ | Free. Most one run and 30 days of runs can cost. |
+| `listMonitors` | `GET /desearch/monitors` | ✅ | Free. `status` arrays are sent comma-separated; cursor pagination. |
+| `getMonitor` | `GET /desearch/monitors/{monitor_id}` | ✅ | Free. |
+| `updateMonitor` | `PATCH /desearch/monitors/{monitor_id}` | ✅ | Free. Sends only the given fields; `webhook: null` removes the webhook. |
+| `deleteMonitor` | `DELETE /desearch/monitors/{monitor_id}` | ✅ | Free. |
+| `triggerMonitor` | `POST /desearch/monitors/{monitor_id}/trigger` | ✅ | Queues a billed run (HTTP 202); 409 while one is queued or running. |
+| `listMonitorRuns` | `GET /desearch/monitors/{monitor_id}/runs` | ✅ | Free. Cursor pagination. |
+| `getMonitorRun` | `GET /desearch/monitors/{monitor_id}/runs/{run_id}` | ✅ | Free. The run with the items it kept. |
+| `listMonitorItems` | `GET /desearch/monitors/{monitor_id}/items` | ✅ | Free. `source` filter; cursor pagination. |
+| `testMonitorWebhook` | `POST /desearch/monitors/{monitor_id}/webhook/test` | ✅ | Free. Sends a signed `monitor.test` event. |
+| `rotateMonitorWebhookSecret` | `POST /desearch/monitors/{monitor_id}/webhook/rotate-secret` | ✅ | Free. Returns the new secret once. |
+| `iterMonitorItems` | pages `GET /desearch/monitors/{monitor_id}/items` | ✅ | SDK helper. Async iterator over the items, page by page. |
+| `verifyWebhookSignature` | none (local) | ✅ | Checks a delivery's `Desearch-Signature` header against the raw body. |
 
 ## Request and response type coverage
 
@@ -147,7 +163,7 @@ Status legend:
 
 - ✅ `SocialPageParams` (`count`, `cursor`)
 - ✅ `TikTokSearchRequest`, `TikTokPostByIdParams`, `TikTokProfileParams`, `TikTokProfilePostsParams`, `TikTokCommentsParams`, `TikTokHashtagParams`, `TikTokTrendingParams`
-- ✅ `FacebookSearchRequest`, `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
+- ✅ `FacebookSearchRequest` (with `sort`: `FacebookSearchSort`), `FacebookPostByIdParams`, `FacebookProfileParams`, `FacebookProfilePostsParams`, `FacebookCommentsParams`, `FacebookHashtagParams`
 - ✅ `InstagramSearchRequest` (no `cursor`), `InstagramMediaParams`, `InstagramProfileParams`, `InstagramProfilePostsParams`, `InstagramCommentsParams`, `InstagramHashtagParams`
 - ✅ `SocialCursorParams` (`cursor` only, for the YouTube and Reddit list routes)
 - ✅ `YouTubeSearchRequest`, `YouTubeVideoParams`, `YouTubeTranscriptParams`, `YouTubeCommentsParams`, `YouTubeChannelParams`, `YouTubeChannelVideosParams` and the unions `YouTubeSearchType`, `YouTubeUploadDate`, `YouTubeSearchSort`, `YouTubeDuration`, `YouTubeCommentOrder`, `YouTubeChannelVideosSort`
@@ -172,6 +188,13 @@ Status legend:
 - ✅ `CompanyRole`, `CompanyRequirement`, `CompanyTaskType`
 - ✅ `CompanyTaskParams`, `ListCompanyTasksParams`, `GetCompanyResultsParams`, `ExportCompanyResultsParams`, `WaitForCompanyTaskOptions`
 - ✅ `PeopleSearchOptions` (`idempotencyKey`) is shared by the company create calls
+
+### Monitors request types
+
+- ✅ `MonitorCreateRequest` (`query`, `name`, `criteria`, `sources`, `interval`, `options`, `min_score`, `summary`, `webhook`, `metadata`, `run_now`), `MonitorUpdateRequest` (the same fields plus `status`), `MonitorEstimateRequest`
+- ✅ `MonitorOptions`, `MonitorWebOptions`, `MonitorXOptions` (with `accounts`), `MonitorRedditOptions` (`subreddits`), `MonitorYouTubeOptions` (`channels`), `MonitorTikTokOptions` (`count`, `accounts`, `hashtags`), `MonitorThreadsOptions` (`accounts`), `MonitorInstagramOptions` (`accounts`, `hashtags`), `MonitorFacebookOptions` (`pages`), `MonitorMetaAdsOptions` (`count`), `MonitorWebhookConfig`
+- ✅ `MonitorSource`, `MonitorInterval`, `MonitorEvent`, `MonitorStatus`
+- ✅ `MonitorParams`, `MonitorRunParams`, `ListMonitorsParams`, `ListMonitorRunsParams`, `ListMonitorItemsParams`, `VerifyWebhookSignatureOptions`
 
 ### Response types
 
@@ -198,6 +221,7 @@ Status legend:
 - ✅ `NetworkStatsResponse`, `NetworkStatsRates`, `NetworkStatsHistoryResponse`, `NetworkStatsHistoryPoint`, `NetworkStatsStreamEvent`
 - ✅ `DesearchCostMetadata.nextCursor` (from `x-desearch-next-cursor`)
 - ✅ `CompanyTask`, `CompanySearchTask` (task plus reservation cost fields), `CompanyTaskList`, `CompanyTaskConflictResponse`, `CompanyTaskWarning`, `CompanyCompletionReason`, `CompanyTaskStage`, `CompanySearchType`, `CompanyPlatform`; statuses, links and `created_by` reuse the People Search types
+- ✅ `Monitor`, `MonitorCreated` (with `webhook_secret`), `MonitorList`, `MonitorWebhook` (with `last_delivery`: `MonitorWebhookDelivery`), `MonitorLastRun`, `MonitorStats`, `MonitorRun`, `MonitorRunWithItems`, `MonitorRunList`, `MonitorRunStats`, `MonitorRunSourceStats`, `MonitorItem`, `MonitorItemAuthor`, `MonitorItemSignals` (with `criteria`), `MonitorItemData` (`account` for watched accounts, `hashtag` for watched hashtags), `MonitorSocialPostItemData` (`post_id`, `type`, `hashtags`, `media`, `thumbnail`), `MonitorTikTokItemData`, `MonitorThreadsItemData`, `MonitorInstagramItemData`, `MonitorFacebookItemData`, `MonitorMetaAdsItemData`, `MonitorItemList`, `MonitorEstimate`, `MonitorDeleted`, `MonitorWebhookTestResult`, `MonitorWebhookSecret`, `MonitorWebhookEvent`, plus `MonitorPausedReason`, `MonitorRunStatus`, `MonitorRunFailReason`, `MonitorRunTrigger`, `MonitorWebhookEventType` and `MonitorWebhookDeliveryStatus`
 - ✅ `Company`, `CompanyEmail`, `CompanyEmailVerification`, `CompanyEmailChecks`, `CompanyPhone`, `CompanySocial`, `CompanyPage`, `CompanyLocation`, `CompanyPerson`, `CompanyPersonEvidence`, `CompanyPrimaryContact`, `CompanyContactCoverage`, `CompanyEnrichment`, `CompanyEnrichmentStages`, `CompanyEnrichmentError`, `CompanyScore` (its `criteria_checks` are `PeopleCriterionCheck`), `CompanyFoundBy`, `CompanyResultsPage`, plus the value unions (`CompanyEmailType`, `CompanyEmailVerificationStatus`, `CompanyContactSource`, `CompanyStageState`, ...). Result objects accept fields a newer API adds.
 
 ### Detailed X entity models
@@ -227,6 +251,7 @@ Status legend:
 - the Search API and the public network stats, including a live Server-Sent Events stream
 - People Search across X, YouTube, LinkedIn and TikTok, with task control, polling and pagination helpers
 - Company Search and Company Enrich, with task control, a polling helper and a company iterator
+- Monitors: create, change, trigger and delete scheduled searches or watched accounts (including TikTok, Instagram and Facebook pages), TikTok and Instagram hashtags and Meta ads, read their runs and items, see the latest webhook delivery, and verify signed webhook deliveries
 - one predictable request path across all public methods
 - Node-oriented HTTP transport through `undici`
 - CommonJS, ESM, and declaration output for package consumers
@@ -242,5 +267,5 @@ Status legend:
 
 - configurable transport options
 - runtime schema validation
-- write or mutation endpoints beyond People Search and company tasks
+- write or mutation endpoints beyond People Search, company tasks and monitors
 - a browser-first transport abstraction

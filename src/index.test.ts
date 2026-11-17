@@ -2062,7 +2062,7 @@ describe('Search API', () => {
         highlights: ['John J. Hopfield and Geoffrey Hinton'],
       },
     ],
-    meta: { latency_ms: 1800, notices: [] },
+    meta: { notices: [] },
     cost_usd: 0.004,
     usage_count: 1,
     service: 'search',
@@ -2119,7 +2119,7 @@ describe('Search API', () => {
       body: {
         ...response,
         summary: null,
-        meta: { latency_ms: 900, notices: ['Summary unavailable.'] },
+        meta: { notices: ['Summary unavailable.'] },
       },
     });
 

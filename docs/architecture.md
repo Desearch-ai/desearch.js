@@ -195,11 +195,15 @@ Why this matters:
 
 ## Method groups
 
+### Search
+
+`search` (and its alias `searchApi`) sends `POST /search` with a JSON body.
+
 ### AI search methods
 
 These use POST requests with JSON bodies:
 - `aiSearch`
-- `aiWebLinksSearch`
+- `aiWebLinksSearch` (deprecated; use `search`)
 - `aiXLinksSearch`
 
 #### `aiSearch` special behavior

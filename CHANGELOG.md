@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.15.0
+
+Adds `search` with an optional summary. No existing call changes.
+
+- Added `search(payload)` for `POST /search`: web search on the Desearch index. `searchApi` is the same method.
+- `SearchApiRequest` takes `include_domains` (at most 100), `exclude_domains` (at most 1,200), and `summary`.
+- `SearchApiResponse` has `meta` (`latency_ms`, `notices`) and, when the request sets `summary: true`, `summary`: `{ text, citations: [{ index, url, title }] }`, or `null` with `meta.notices` saying `Summary unavailable.`. `[n]` in `text` refers to `citations[].index`; every cited page is also in `results`. The summary has no extra charge. Added `SearchApiSummary`, `SearchApiCitation` and `SearchApiMeta`.
+- `aiWebLinksSearch` (`POST /desearch/ai/search/links/web`) is deprecated; use `search`. It keeps working.
+- `aiSearch` covers X posts and web (from the Desearch index) with an optional AI summary. Web results are capped at 20 per request.
+
 ## 1.14.0
 
 Adds Monitors. New methods, plus an optional `sort` on `facebookSearch`; no existing call changes.

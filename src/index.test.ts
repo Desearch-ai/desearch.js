@@ -2062,6 +2062,7 @@ describe('Search API', () => {
         highlights: ['John J. Hopfield and Geoffrey Hinton'],
       },
     ],
+    meta: { latency_ms: 1800, notices: [] },
     cost_usd: 0.004,
     usage_count: 1,
     service: 'search',
@@ -2080,8 +2081,10 @@ describe('Search API', () => {
       end_date: '2024-12-31',
       highlights: true,
       page_text: false,
+      include_domains: ['nobelprize.org'],
+      exclude_domains: ['pinterest.com'],
     };
-    const result = await client.searchApi(payload);
+    const result = await client.search(payload);
     expect(result).toEqual(response);
     expect(result.results[0].highlights).toEqual([
       'John J. Hopfield and Geoffrey Hinton',
@@ -2095,6 +2098,44 @@ describe('Search API', () => {
       'Content-Type': 'application/json',
     });
     expect(JSON.parse(call.body!)).toEqual(payload);
+  });
+
+  it('sends summary fields and returns the summary with its citations', async () => {
+    const withSummary = {
+      ...response,
+      summary: {
+        text: 'John Hopfield and Geoffrey Hinton won it [1].',
+        citations: [
+          {
+            index: 1,
+            url: 'https://www.nobelprize.org/prizes/physics/2024/summary/',
+            title: 'The Nobel Prize in Physics 2024',
+          },
+        ],
+      },
+    };
+    mockResponse({ body: withSummary });
+    mockResponse({
+      body: {
+        ...response,
+        summary: null,
+        meta: { latency_ms: 900, notices: ['Summary unavailable.'] },
+      },
+    });
+
+    const client = new Desearch('test-key');
+    const payload = {
+      query: 'Who won the 2024 Nobel Prize in Physics?',
+      summary: true,
+    };
+    const result = await client.search(payload);
+    expect(result.summary?.citations[0].index).toBe(1);
+    expect(JSON.parse(fetchCall(0).body!)).toEqual(payload);
+
+    const unavailable = await client.searchApi(payload);
+    expect(unavailable.summary).toBeNull();
+    expect(unavailable.meta.notices).toEqual(['Summary unavailable.']);
+    expect(fetchCall(1).url).toBe('https://api.desearch.ai/search');
   });
 
   it('returns header metadata when opted in and surfaces 503 as an HTTP error', async () => {

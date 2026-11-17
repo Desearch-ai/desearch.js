@@ -2116,8 +2116,6 @@ export interface SearchApiSummary {
 }
 
 export interface SearchApiMeta {
-  /** Time the search took on the server, in milliseconds */
-  latency_ms: number;
   /** Notes on this answer, such as `Summary unavailable.` */
   notices: string[];
 }

@@ -2,7 +2,7 @@
 
 Official JavaScript and TypeScript SDK for the Desearch public API.
 
-This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.14.0`.
+This repo publishes the npm package `desearch-js`. In the current source tree, the package version is `1.15.0`.
 
 Related docs:
 - [docs/features.md](./docs/features.md)
@@ -15,13 +15,14 @@ Related docs:
 `desearch.js` is a thin, Node-oriented SDK for the Desearch API. It wraps the public read-side endpoints implemented in `src/index.ts` behind one `Desearch` client class and ships a typed surface from `src/types.ts`.
 
 What it covers today:
-- AI multi-source search
-- AI web-links search
+- Search: web search on the Desearch index, with an optional short answer with numbered citations
+- AI Search: X posts and web with an optional AI summary
 - AI X-links search
+- AI web-links search (deprecated; use `search`)
+- SERP web search
 - X search and lookup endpoints
 - TikTok, Facebook and Instagram search, profiles, posts, comments and hashtags
 - YouTube search, videos, transcripts, comments and channels; Reddit search, subreddits, posts and comment trees; Threads search, profiles and posts
-- web search and the Search API (ranked pages with the best passage)
 - page extraction
 - People Search: X, YouTube, LinkedIn and TikTok searches that run as background tasks
 - Company Search and Company Enrich: companies with their public emails, phones, social profiles and leaders, also as background tasks
@@ -54,17 +55,15 @@ import Desearch from 'desearch-js';
 
 const client = new Desearch(process.env.DESEARCH_API_KEY!);
 
-const result = await client.aiSearch({
-  prompt: 'latest Bittensor developments',
-  tools: ['web'],
-  start_date: '2025-05-01T00:00:00Z',
-  end_date: '2025-05-08T00:00:00Z',
-  include_domains: ['bbc.com', 'reuters.com'],
-  result_type: 'LINKS_WITH_FINAL_SUMMARY',
-  count: 10,
+const { results, summary } = await client.search({
+  query: 'Who won the 2024 Nobel Prize in Physics?',
+  summary: true,
 });
 
-console.log(result);
+console.log(summary?.text);
+for (const result of results) {
+  console.log(result.title, result.url);
+}
 ```
 
 ### CommonJS usage
@@ -88,11 +87,15 @@ The SDK sends that value as the `Authorization` header on every request.
 
 ## API overview
 
+### Search
+
+- `search(payload)` → `POST /search` (web search with an optional summary; `searchApi(payload)` is the same method)
+
 ### AI search methods
 
-- `aiSearch(payload)` → `POST /desearch/ai/search`
-- `aiWebLinksSearch(payload)` → `POST /desearch/ai/search/links/web`
+- `aiSearch(payload)` → `POST /desearch/ai/search` (X posts and web, with an optional AI summary)
 - `aiXLinksSearch(payload)` → `POST /desearch/ai/search/links/twitter`
+- `aiWebLinksSearch(payload)` → `POST /desearch/ai/search/links/web` (deprecated; use `search`)
 
 ### X methods
 
@@ -164,7 +167,6 @@ See [Social pagination](#social-pagination) for the cursor flow.
 ### Web methods
 
 - `webSearch(params)` → `GET /web`
-- `searchApi(payload)` → `POST /search`
 - `extract(params)` → `GET /web/extract`
 - `webCrawl(params)` → `GET /web/crawl` (deprecated compatibility method)
 
@@ -233,13 +235,39 @@ See [Monitors](#monitors) for the full flow.
 
 ## Usage examples
 
+### Search
+
+```ts
+const { results, summary, meta, cost_usd } = await client.search({
+  query: 'Who won the 2024 Nobel Prize in Physics?',
+  mode: 'balanced', // or 'fast'
+  count: 10, // 10, 15 or 20
+  start_date: '2024-01-01',
+  include_domains: ['nobelprize.org', 'reuters.com'],
+  summary: true,
+});
+console.log(summary?.text); // "... [1]"
+for (const citation of summary?.citations ?? []) {
+  console.log(citation.index, citation.url);
+}
+for (const result of results) {
+  console.log(result.title, result.url, result.highlights?.[0]);
+}
+```
+
+- `summary: true` adds a short answer written from the results. `[n]` in `summary.text` refers to `summary.citations[].index`, and every cited page is also in `results`. The summary has no extra charge.
+- When the summary could not be written, `summary` is `null` and `meta.notices` has `Summary unavailable.`; the results are still returned.
+- `exclude_domains` wins over `include_domains` and `site:`.
+- Set `page_text: true` to get each page's full text, and `highlights: false` to leave out the best passage.
+
 ### AI search
+
+AI Search is for X posts, with web results from the Desearch index and an optional AI summary. For web only, use `search`.
 
 ```ts
 const result = await client.aiSearch({
-  prompt: 'recent AI chip announcements',
-  tools: ['web'],
-  exclude_domains: ['pinterest.com'],
+  prompt: 'reactions to the latest Bittensor halving',
+  tools: ['twitter', 'web'],
   result_type: 'LINKS_WITH_FINAL_SUMMARY',
   count: 20,
 });
@@ -247,17 +275,8 @@ const result = await client.aiSearch({
 
 Notes:
 - `tools` accepts the source names defined in `src/types.ts`: `web`, `hackernews`, `reddit`, `wikipedia`, `youtube`, `twitter`, `arxiv`
+- Web results are capped at 20 per request
 - `aiSearch` always sends `streaming: false`, even if a caller tries to add a `streaming` field manually
-
-### AI web links search
-
-```ts
-const links = await client.aiWebLinksSearch({
-  prompt: 'open source browser automation tools',
-  tools: ['web', 'hackernews', 'reddit', 'youtube'],
-  count: 20,
-});
-```
 
 ### AI X links search
 
@@ -296,22 +315,6 @@ const results = await client.webSearch({
   start: 0,
 });
 ```
-
-### Search API
-
-```ts
-const { results, cost_usd } = await client.searchApi({
-  query: 'Who won the 2024 Nobel Prize in Physics?',
-  mode: 'balanced', // or 'fast'
-  count: 10, // 10, 15 or 20
-  start_date: '2024-01-01',
-});
-for (const result of results) {
-  console.log(result.title, result.url, result.highlights?.[0]);
-}
-```
-
-Set `page_text: true` to get each page's full text, and `highlights: false` to leave out the best passage.
 
 ### Extract
 
@@ -464,14 +467,14 @@ for await (const event of client.streamNetworkStats({ lastEventId })) {
 SDK methods return the same raw payload shape by default:
 
 ```ts
-const results = await client.webSearch({ query: 'desearch sdk' });
-console.log(results.data);
+const results = await client.search({ query: 'desearch sdk' });
+console.log(results.results);
 ```
 
 If you want per-request cost visibility, pass `{ includeMetadata: true }` as the second argument. The SDK reads metadata from the same API response headers; it does not make an extra billing or pricing request.
 
 ```ts
-const response = await client.webSearch(
+const response = await client.search(
   { query: 'desearch sdk' },
   { includeMetadata: true },
 );
@@ -1162,7 +1165,7 @@ Example:
 
 ```ts
 try {
-  await client.webSearch({ query: 'desearch' });
+  await client.search({ query: 'desearch' });
 } catch (error) {
   console.error(error);
 }

@@ -42,7 +42,7 @@ Status legend:
 | Method | Endpoint | Status | Why |
 | --- | --- | --- | --- |
 | `aiSearch` | `POST /desearch/ai/search` | ⚠️ | Works as a JSON wrapper, but it overrides caller intent and always sends `streaming: false`. |
-| `aiWebLinksSearch` | `POST /desearch/ai/search/links/web` | ✅ | Direct typed wrapper for web-source link retrieval. |
+| `aiWebLinksSearch` | `POST /desearch/ai/search/links/web` | ⚠️ deprecated | Use `search`. The route keeps working. |
 | `aiXLinksSearch` | `POST /desearch/ai/search/links/twitter` | ✅ | Direct typed wrapper for X link retrieval. |
 | `xSearch` | `GET /twitter` | ✅ | Broad filter support through shared query-string serialization. |
 | `xPostsByUrls` | `GET /twitter/urls` | ⚠️ | Works as long as the upstream API continues to accept repeated `urls` query keys. |
@@ -56,7 +56,8 @@ Status legend:
 | `webSearch` | `GET /web` | ✅ | SERP-style web search wrapper. |
 | `extract` | `GET /web/extract` | ✅ | Canonical Extract API method; returns non-JSON text or HTML content. |
 | `webCrawl` | `GET /web/crawl` | ⚠️ legacy | Deprecated compatibility method for existing clients. |
-| `searchApi` | `POST /search` | ✅ | Ranked pages with the best-matching passage; cost fields in the body. |
+| `search` | `POST /search` | ✅ | Ranked pages with the best-matching passage, an optional summary with citations, `meta` and cost fields in the body. |
+| `searchApi` | `POST /search` | ✅ | Same method as `search`. |
 | `tiktokSearch` | `POST /desearch/tiktok/search` | ✅ | Paginated; `cursor` in the body. |
 | `tiktokPostById` | `GET /desearch/tiktok/post/{id}` | ✅ | `id` URL-encoded into the path. |
 | `tiktokProfile` | `GET /desearch/tiktok/profile/{username}` | ✅ | Single profile. |
@@ -169,7 +170,7 @@ Status legend:
 - ✅ `YouTubeSearchRequest`, `YouTubeVideoParams`, `YouTubeTranscriptParams`, `YouTubeCommentsParams`, `YouTubeChannelParams`, `YouTubeChannelVideosParams` and the unions `YouTubeSearchType`, `YouTubeUploadDate`, `YouTubeSearchSort`, `YouTubeDuration`, `YouTubeCommentOrder`, `YouTubeChannelVideosSort`
 - ✅ `RedditSearchRequest`, `RedditSubredditParams`, `RedditSubredditPostsParams`, `RedditPostByIdParams`, `RedditCommentsParams` and the unions `RedditSearchSort`, `RedditSubredditSort`, `RedditTimeframe`
 - ✅ `ThreadsSearchRequest` (no `cursor`), `ThreadsSearchUsersRequest`, `ThreadsProfileParams`, `ThreadsProfilePostsParams` (no `cursor`), `ThreadsPostByIdParams`
-- ✅ `SearchApiRequest`, `SearchApiMode`
+- ✅ `SearchApiRequest` (with `include_domains`, `exclude_domains`, `summary`), `SearchApiMode`
 - ✅ `StreamNetworkStatsOptions` (`lastEventId`, `signal`)
 
 ### People Search request types
@@ -217,7 +218,7 @@ Status legend:
 - ✅ `YouTubeItem`, `YouTubeItemType`, `YouTubeChannelRef`, `YouTubeVideo`, `YouTubeChapter`, `YouTubeCaptionLanguage`, `YouTubeTranscript`, `YouTubeTranscriptSegment`, `YouTubeComment`, `YouTubeCommentAuthor`, `YouTubeChannel`
 - ✅ `RedditPost`, `RedditSubreddit`, `RedditComment` (recursive `replies`)
 - ✅ `ThreadsPost`, `ThreadsPostDetail`, `ThreadsProfile`, `ThreadsUser`
-- ✅ `SearchApiResponse`, `SearchApiResult`
+- ✅ `SearchApiResponse`, `SearchApiResult`, `SearchApiSummary`, `SearchApiCitation`, `SearchApiMeta`
 - ✅ `NetworkStatsResponse`, `NetworkStatsRates`, `NetworkStatsHistoryResponse`, `NetworkStatsHistoryPoint`, `NetworkStatsStreamEvent`
 - ✅ `DesearchCostMetadata.nextCursor` (from `x-desearch-next-cursor`)
 - ✅ `CompanyTask`, `CompanySearchTask` (task plus reservation cost fields), `CompanyTaskList`, `CompanyTaskConflictResponse`, `CompanyTaskWarning`, `CompanyCompletionReason`, `CompanyTaskStage`, `CompanySearchType`, `CompanyPlatform`; statuses, links and `created_by` reuse the People Search types

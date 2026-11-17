@@ -2081,6 +2081,12 @@ export interface SearchApiRequest {
   highlights?: boolean;
   /** Include the full page text (default false) */
   page_text?: boolean;
+  /** Only return pages on these domains or their subdomains (at most 100) */
+  include_domains?: string[];
+  /** Never return pages on these domains or their subdomains (at most 1,200). Wins over `include_domains` and `site:`. */
+  exclude_domains?: string[];
+  /** Also return a short answer written from the results, with numbered citations (default false) */
+  summary?: boolean;
 }
 
 /** One ranked page from the Search API. */
@@ -2095,9 +2101,33 @@ export interface SearchApiResult {
   page_text?: string | null;
 }
 
+/** A page cited in the summary. `[index]` in `SearchApiSummary.text` refers to it. */
+export interface SearchApiCitation {
+  index: number;
+  url: string;
+  title: string;
+}
+
+/** Short answer written from the results. Every cited page is also in `results`. */
+export interface SearchApiSummary {
+  /** Answer text with citations like [1] and [2] */
+  text: string;
+  citations: SearchApiCitation[];
+}
+
+export interface SearchApiMeta {
+  /** Time the search took on the server, in milliseconds */
+  latency_ms: number;
+  /** Notes on this answer, such as `Summary unavailable.` */
+  notices: string[];
+}
+
 export interface SearchApiResponse {
   /** Ranked pages */
   results: SearchApiResult[];
+  /** Present when the request sets `summary: true`; null when the summary could not be written */
+  summary?: SearchApiSummary | null;
+  meta: SearchApiMeta;
   /** Cost charged for this request in USD */
   cost_usd: number;
   /** Billable usage units for this request */

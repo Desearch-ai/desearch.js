@@ -652,7 +652,7 @@ export class Desearch {
   }
 
   /**
-   * Perform an AI-powered multi-source contextual search across web, X, Reddit, YouTube, HackerNews, Wikipedia, and arXiv.
+   * AI Search: X posts and web (from our index) with an optional AI summary. For web-only search use `search()`.
    *
    * @param payload - The search request parameters including prompt, tools, date filters, and result type.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
@@ -692,6 +692,7 @@ export class Desearch {
    * @param payload - The web links search request parameters including prompt, tools, and count.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
    * @returns Structured link results grouped by source, or a metadata wrapper when opted in.
+   * @deprecated Use `search()` (`POST /search`). This method keeps calling `/desearch/ai/search/links/web`, which still works.
    */
   async aiWebLinksSearch(
     payload: AiWebLinksSearchRequest,
@@ -1148,13 +1149,44 @@ export class Desearch {
   }
 
   /**
-   * Search the web and return ranked pages, each with the passage that best matches the query (Search API).
+   * Search the web (our index) and return ranked pages, each with the passage that best matches the query, and optionally a short answer with numbered citations.
    *
-   * The JSON body includes `cost_usd`, `usage_count`, `service` and `currency`.
+   * Calls `POST /search`. The JSON body includes `meta`, `cost_usd`, `usage_count`, `service` and `currency`. With `summary: true` it also has `summary` (`{ text, citations }`), or `null` with `meta.notices` saying `Summary unavailable.` when it could not be written. The summary has no extra charge.
    *
-   * @param payload - The search request including query, mode (fast or balanced), count (10, 15 or 20), date range, highlights and page_text.
+   * @param payload - The search request: query, mode (fast or balanced), count (10, 15 or 20), date range, highlights, page_text, include/exclude domains and summary.
    * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
-   * @returns Ranked results and the cost of the request, or a metadata wrapper when opted in.
+   * @returns Ranked results, the optional summary and the cost of the request, or a metadata wrapper when opted in.
+   */
+  async search(
+    payload: SearchApiRequest,
+    options: DesearchMetadataRequestOptions
+  ): Promise<DesearchResponse<SearchApiResponse>>;
+  async search(
+    payload: SearchApiRequest,
+    options?: DesearchDefaultRequestOptions
+  ): Promise<SearchApiResponse>;
+  async search(
+    payload: SearchApiRequest,
+    options: DesearchRequestOptions
+  ): Promise<SearchApiResponse | DesearchResponse<SearchApiResponse>>;
+  async search(
+    payload: SearchApiRequest,
+    options?: DesearchRequestOptions
+  ): Promise<SearchApiResponse | DesearchResponse<SearchApiResponse>> {
+    return this.handleRequest<SearchApiResponse>(
+      'POST',
+      '/search',
+      payload,
+      options
+    );
+  }
+
+  /**
+   * Same as `search()`: calls `POST /search`.
+   *
+   * @param payload - The search request, as for `search()`.
+   * @param options - Optional SDK response options. Set `includeMetadata: true` to receive response cost metadata.
+   * @returns Ranked results, the optional summary and the cost of the request, or a metadata wrapper when opted in.
    */
   async searchApi(
     payload: SearchApiRequest,
@@ -1172,12 +1204,7 @@ export class Desearch {
     payload: SearchApiRequest,
     options?: DesearchRequestOptions
   ): Promise<SearchApiResponse | DesearchResponse<SearchApiResponse>> {
-    return this.handleRequest<SearchApiResponse>(
-      'POST',
-      '/search',
-      payload,
-      options
-    );
+    return this.search(payload, options as DesearchRequestOptions);
   }
 
   /**
